@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <AssemblyName>Phi.Resources</AssemblyName>
+        <RootNamespace>Phi.Resources</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <None Remove="Shaders\Basic.vsh" />
+      <EmbeddedResource Include="Shaders\Basic.vsh" />
+      <None Remove="Shaders\Textured.fsh" />
+      <EmbeddedResource Include="Shaders\Textured.fsh" />
+      <None Remove="Textures\Drag.png" />
+      <EmbeddedResource Include="Textures\Drag.png" />
+      <None Remove="Textures\DragHL.png" />
+      <EmbeddedResource Include="Textures\DragHL.png" />
+      <None Remove="Textures\Flick2.png" />
+      <EmbeddedResource Include="Textures\Flick2.png" />
+      <None Remove="Textures\Flick2HL.png" />
+      <EmbeddedResource Include="Textures\Flick2HL.png" />
+      <None Remove="Textures\Hold.png" />
+      <EmbeddedResource Include="Textures\Hold.png" />
+      <None Remove="Textures\Hold2HL_0.png" />
+      <EmbeddedResource Include="Textures\Hold2HL_0.png" />
+      <None Remove="Textures\Hold2HL_1.png" />
+      <EmbeddedResource Include="Textures\Hold2HL_1.png" />
+      <None Remove="Textures\Hold_End.png" />
+      <EmbeddedResource Include="Textures\Hold_End.png" />
+      <None Remove="Textures\Hold_Head.png" />
+      <EmbeddedResource Include="Textures\Hold_Head.png" />
+      <None Remove="Textures\Tap2.png" />
+      <EmbeddedResource Include="Textures\Tap2.png" />
+      <None Remove="Textures\Tap2HL.png" />
+      <EmbeddedResource Include="Textures\Tap2HL.png" />
+      <None Remove="Shaders\ClipMap.fsh" />
+      <EmbeddedResource Include="Shaders\ClipMap.fsh" />
+    </ItemGroup>
+
+</Project>

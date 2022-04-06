@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <PackageId>Phi.Desktop</PackageId>
+        <TargetFrameworks>net6.0;netstandard2.1</TargetFrameworks>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Phi.Viewer\Phi.Viewer.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Veldrid.StartupUtilities" Version="4.8.0" />
+    </ItemGroup>
+
+</Project>

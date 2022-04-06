@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="BigGustave" Version="1.0.6" />
+      <PackageReference Include="SharpText.Veldrid" Version="0.3.1" />
+      <PackageReference Include="Veldrid" Version="4.8.0" />
+      <PackageReference Include="Veldrid.ImGui" Version="5.72.0" />
+      <PackageReference Include="Veldrid.SPIRV" Version="1.0.14" />
+      <PackageReference Include="Veldrid.Utilities" Version="4.8.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Phi.Charting\Phi.Charting.csproj" />
+      <ProjectReference Include="..\Phi.Resources\Phi.Resources.csproj" />
+    </ItemGroup>
+
+</Project>
