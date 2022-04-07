@@ -3,13 +3,13 @@
 layout(location = 0) in vec2 Position;
 layout(location = 1) in vec2 TextureCoordinates;
 
-layout(binding = 2) uniform Transform {
+layout(location = 0) out vec2 fsin_uv;
+layout(location = 1) out vec2 fsin_pos;
+
+layout(set = 0, binding = 2) uniform Transform {
     mat4 Matrix;
     vec2 Resolution;
 };
-
-layout(location = 0) out vec2 fsin_uv;
-layout(location = 1) out vec2 fsin_pos;
 
 void main()
 {

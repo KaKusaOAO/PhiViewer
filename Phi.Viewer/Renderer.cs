@@ -89,18 +89,17 @@ namespace Phi.Viewer
         private bool _isClipping;
 
         private FreeTypeLibrary _ft;
-
         private IntPtr _fontFace = IntPtr.Zero;
-
         private IntPtr _memFont = IntPtr.Zero;
 
         private uint _fontSize = 70;
-
         private uint _fontTexPad = 5;
-
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
 
         public bool NeedsUpdateRenderTarget { get; set; }
+
+        private Framebuffer _currentFramebuffer;
+        private Pipeline _currentPipeline;
         
         public Renderer(PhiViewer viewer)
         {
@@ -260,7 +259,7 @@ namespace Phi.Viewer
                 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                 TextureUsage.RenderTarget | TextureUsage.Sampled);
             
-            var sampleCount = TextureSampleCount.Count4;
+            var sampleCount = TextureSampleCount.Count16;
             GraphicsDevice.GetPixelFormatSupport(renderColorDesc.Format, renderColorDesc.Type, renderColorDesc.Usage,
                 out var properties);
             while (!properties.IsSampleCountSupported(sampleCount)) sampleCount--;
@@ -363,20 +362,44 @@ namespace Phi.Viewer
         public void Begin()
         {
             var window = Viewer.Host.Window;
-            GraphicsDevice.MainSwapchain.Resize((uint) window.Width, (uint) window.Height);
+
+            var fb = GraphicsDevice.MainSwapchain.Framebuffer;
+            if (fb.Width != (uint)window.Width || fb.Height != (uint)window.Height)
+            {
+                GraphicsDevice.MainSwapchain.Resize((uint)window.Width, (uint)window.Height);
+            }
             
             CommandList.Begin();
+            SetFramebufferPipelinePair(_renderTarget, _pipeline);
+            ClearBuffers();
+            CommandList.SetViewport(0, new Viewport(0, 0, window.Width, window.Height, 0, 1));
+        }
+
+        private void SetFramebufferPipelinePair(Framebuffer framebuffer, Pipeline pipeline)
+        {
+            CommandList.SetFramebuffer(framebuffer);
+            CommandList.SetPipeline(pipeline);
+            _currentFramebuffer = framebuffer;
+            _currentPipeline = pipeline;
+        }
+
+        private void ClearBuffers()
+        {
             ClearClip();
             
             CommandList.SetFramebuffer(GraphicsDevice.SwapchainFramebuffer);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            
-            CommandList.SetFramebuffer(_renderTarget);
-            CommandList.SetPipeline(_pipeline);
+            SetFramebufferPipelinePair(_renderTarget, _pipeline);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            CommandList.SetViewport(0, new Viewport(0, 0, window.Width, window.Height, 0, 1));
         }
         
+        /// <summary>
+        /// Draws a quad with currently used pipeline, framebuffer and fragment resource set.
+        /// </summary>
+        /// <param name="x">The X position (left-top) of the quad.</param>
+        /// <param name="y">The Y position (left-top) of the quad.</param>
+        /// <param name="width">The width of the quad.</param>
+        /// <param name="height">The height of the quad.</param>
         public void DrawQuad(float x, float y, float width, float height)
         {
             CommandList.PushDebugGroup("DrawQuad");
@@ -387,7 +410,7 @@ namespace Phi.Viewer
                 new Vector4(x, y + height, 0, 1),
                 new Vector4(x + width, y + height, 1, 1),
             };
-            BufferDescription vbDescription = new BufferDescription(64, BufferUsage.VertexBuffer);
+            var vbDescription = new BufferDescription(64, BufferUsage.VertexBuffer);
             
             var factory = Factory;
             var vertexBuffer = factory.CreateBuffer(vbDescription);
@@ -502,6 +525,7 @@ namespace Phi.Viewer
         {
             CommandList.End();
             GraphicsDevice.SubmitCommands(CommandList);
+            GraphicsDevice.WaitForIdle();
             GraphicsDevice.SwapBuffers();
             
             Factory.DisposeCollector.DisposeAll();
@@ -578,11 +602,23 @@ namespace Phi.Viewer
 
             var p = Viewer.WindowSize.Width + Viewer.WindowSize.Height;
             p += width + height;
+
+            var t = Transform;
+            if (GraphicsDevice.BackendType != GraphicsBackend.OpenGL &&
+                GraphicsDevice.BackendType != GraphicsBackend.OpenGLES)
+            {
+                Transform = Matrix4x4.Identity;
+                Scale(1, -1);
+                Translate(0, -Viewer.WindowSize.Height);
+                Transform *= t;
+            }
+            
             DrawRect(Color.Black, x - p, y,       p, p);
             DrawQuad(x, y + height,               p, p);
             DrawQuad(x + width, y + height - p, p, p);
             DrawQuad(x - p, y - p,              p * 2, p);
-            
+
+            Transform = t;
             _isClipping = false;
             CommandList.SetFramebuffer(_renderTarget);
             CommandList.SetPipeline(_pipeline);

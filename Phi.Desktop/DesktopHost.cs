@@ -14,8 +14,7 @@ namespace Phi.Desktop
 
             var device = VeldridStartup.CreateGraphicsDevice(window, new GraphicsDeviceOptions {
                 PreferStandardClipSpaceYDirection = true,
-                PreferDepthRangeZeroToOne = true,
-                ResourceBindingModel = ResourceBindingModel.Improved
+                PreferDepthRangeZeroToOne = true
             }, GraphicsBackend.OpenGL);
             
             Window = new Sdl2DesktopWindow(window, device);

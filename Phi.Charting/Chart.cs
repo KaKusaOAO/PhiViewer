@@ -41,8 +41,21 @@ namespace Phi.Charting
             return chart;
         }
 
-        private void ResolveSiblings()
+        public void ResolveSiblings()
         {
+            foreach (var line in JudgeLines)
+            {
+                foreach (var n in line.NotesAbove)
+                {
+                    n.HasSibling = false;
+                }
+                
+                foreach (var n in line.NotesBelow)
+                {
+                    n.HasSibling = false;
+                }
+            }
+            
             foreach (var line in JudgeLines)
             {
                 foreach (var n in line.NotesAbove)

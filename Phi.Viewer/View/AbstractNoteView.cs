@@ -18,6 +18,8 @@ namespace Phi.Viewer.View
         public bool IsCleared { get; private set; }
         
         public bool IsCrossed { get; private set; }
+        
+        public NoteSide Side { get; private set; }
 
         public virtual bool DoesClipOnPositiveSpeed => false; 
 
@@ -73,21 +75,25 @@ namespace Phi.Viewer.View
         
         public abstract void Render();
 
-        public static AbstractNoteView FromModel(JudgeLineView line, Note model)
+        public static AbstractNoteView FromModel(JudgeLineView line, Note model, NoteSide side)
         {
+            AbstractNoteView result = new TapNoteView(line, model);
+            
             switch (model.Type)
             {
-                case NoteType.Tap:
-                    return new TapNoteView(line, model);
                 case NoteType.Flick:
-                    return new FlickNoteView(line, model);
+                    result = new FlickNoteView(line, model);
+                    break;
                 case NoteType.Hold:
-                    return new HoldNoteView(line, model);
+                    result = new HoldNoteView(line, model);
+                    break;
                 case NoteType.Catch:
-                    return new CatchNoteView(line, model);
+                    result = new CatchNoteView(line, model);
+                    break;
             }
 
-            return new TapNoteView(line, model);
+            result.Side = side;
+            return result;
         }
 
         public void SpawnJudge()

@@ -31,11 +31,13 @@ namespace Phi.Viewer.View
         public JudgeLineView(JudgeLine model)
         {
             Model = model;
-            NotesAbove = model.NotesAbove.Select(n => AbstractNoteView.FromModel(this, n)).ToList();
-            NotesBelow = model.NotesBelow.Select(n => AbstractNoteView.FromModel(this, n)).ToList();
+            NotesAbove = model.NotesAbove.Select(n => AbstractNoteView.FromModel(this, n, NoteSide.Above)).ToList();
+            NotesBelow = model.NotesBelow.Select(n => AbstractNoteView.FromModel(this, n, NoteSide.Below)).ToList();
         }
 
         public float GetConvertedGameTime(float time) => time * Model.Bpm / 1875;
+        
+        public float GetRealTimeFromEventTime(float time) => time / Model.Bpm * 1875;
 
         public Vector2 GetLinePos(float time)
         {
@@ -78,6 +80,11 @@ namespace Phi.Viewer.View
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
             return ev.Value;
+        }
+
+        public void ClearMeter()
+        {
+            _meter.Clear();
         }
 
         public float GetYPos(float time)

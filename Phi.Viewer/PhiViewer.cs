@@ -64,6 +64,8 @@ namespace Phi.Viewer
 
         public float CanvasScale { get; set; } = 1;
 
+        public float Duration { get; set; } = 133000;
+
         public float NoteRatio
         {
             get
@@ -136,6 +138,7 @@ namespace Phi.Viewer
         public void Render()
         {
             Renderer.Begin();
+
             Renderer.Transform = Matrix4x4.Identity;
             Renderer.Translate((WindowSize.Width - WindowSize.Width * CanvasScale) / 2, (WindowSize.Height - WindowSize.Height * CanvasScale) / 2);
             Renderer.Translate(CanvasTranslate.X, CanvasTranslate.Y);
@@ -148,9 +151,15 @@ namespace Phi.Viewer
             Renderer.PushClip();
             Renderer.ClearClip();
             Renderer.Transform = Matrix4x4.Identity;
-            Renderer.Scale(1, -1);
-            Renderer.Translate(0, -WindowSize.Height);
+            
+            if (Renderer.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ||
+                Renderer.GraphicsDevice.BackendType == GraphicsBackend.OpenGLES)
+            {
+                Renderer.Scale(1, -1);
+                Renderer.Translate(0, -WindowSize.Height);
+            }
             Renderer.DrawToMainSwapchain();
+            
             Renderer.PopClip();
             
             Gui.Render(Renderer.GraphicsDevice, Renderer.CommandList);

@@ -1,17 +1,17 @@
 #version 450
  
-layout(set = 0, binding = 0) uniform texture2D Input;
-layout(set = 0, binding = 1) uniform sampler Sampler;
+layout(set = 1, binding = 0) uniform texture2D Input;
+layout(set = 1, binding = 1) uniform sampler Sampler;
 
-layout(set = 0, binding = 2) uniform Tint
+layout(set = 1, binding = 2) uniform Tint
 {
     vec3 RGBTintColor;
     float TintFactor;
     float FinalAlpha;
 };
 
-layout(set = 0, binding = 3) uniform texture2D ClipMap;
-layout(set = 0, binding = 4) uniform sampler ClipMapSampler;
+layout(set = 1, binding = 3) uniform texture2D ClipMap;
+layout(set = 1, binding = 4) uniform sampler ClipMapSampler;
 
 layout(location = 0) in vec2 fsin_uv;
 layout(location = 1) in vec2 fsin_pos;
