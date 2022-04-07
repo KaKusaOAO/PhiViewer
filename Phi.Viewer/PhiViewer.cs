@@ -95,9 +95,9 @@ namespace Phi.Viewer
             Gui = new Gui(this);
 
             Chart = new ChartView(Charting.Chart.Deserialize(
-                File.ReadAllText(@"D:\AppServ\www\phigros\assets\charts\rrhar\3.json")));
+                File.ReadAllText(@"rrhar/3.json")));
 
-            Background = ImageLoader.LoadTextureFromPath(@"D:\AppServ\www\phigros\assets\charts\rrhar\bg.png");
+            Background = ImageLoader.LoadTextureFromPath(@"rrhar/bg.png");
         }
 
         public void Update(InputSnapshot snapshot)
@@ -215,8 +215,18 @@ namespace Phi.Viewer
 
         private void RenderUI()
         {
-            Renderer.DrawText("Shine Bright Like a Diamond", Color.White, 24, 50, 50);
-            Renderer.DrawText("如果說你是夏夜的營火", Color.White, 32, 50, 100);
+            var pad = RenderXPad;
+            var ratio = Ratio;
+            var cw = WindowSize.Width - pad * 2;
+            var ch = WindowSize.Height;
+
+            Renderer.DrawRect(Color.White, pad + 30 * ratio, ch - 62 * ratio, 7.5f * ratio, 35 * ratio);
+            
+            var title = "Rrhar'il";
+            var size = Renderer.MeasureText(title, 28 * ratio);
+            var sScale = size.Width > 545 * ratio ? 545 * ratio / size.Width : 1;
+            var textYOff = size.Height / 2 * sScale;
+            Renderer.DrawText(title, Color.White, 28 * ratio * sScale, pad + 50 * ratio, ch - 45 * ratio + textYOff);
         }
     }
 }

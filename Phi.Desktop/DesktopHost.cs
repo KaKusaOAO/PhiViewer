@@ -11,7 +11,7 @@ namespace Phi.Desktop
         {
             var window = new Sdl2Window("PhiViewer", 100, 100, 1280, 720, 
                 SDL_WindowFlags.Shown | SDL_WindowFlags.Resizable | SDL_WindowFlags.OpenGL, false);
-            
+
             var device = VeldridStartup.CreateGraphicsDevice(window, new GraphicsDeviceOptions {
                 PreferStandardClipSpaceYDirection = true,
                 PreferDepthRangeZeroToOne = true,

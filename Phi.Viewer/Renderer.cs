@@ -609,7 +609,8 @@ namespace Phi.Viewer
                 var w = ch.Size.X * scale;
                 var h = ch.Size.Y * scale;
                 x += c == ' ' ? fontSize * 0.33f : w + fontSize * 0.1f;
-                y = MathF.Max(y, yPos + h);
+                y = MathF.Max(y, h);
+                Console.WriteLine($"yPos={yPos}, h={h}, y={y}");
             }
             
             return new SizeF(x, y);

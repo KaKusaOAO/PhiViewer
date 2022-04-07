@@ -15,4 +15,16 @@
       <PackageReference Include="Veldrid.StartupUtilities" Version="4.8.0" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Update="libsdl2.dylib">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="cimgui.dylib">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+      <None Update="libveldrid-spirv.dylib">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
 </Project>
