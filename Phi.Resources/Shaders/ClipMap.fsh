@@ -8,5 +8,5 @@ layout(location = 0) out vec4 fsout_color;
 
 void main()
 {
-    fsout_color = vec4(1, 1, 1, 1);
+    fsout_color = vec4(0, 0, 0, 1);
 }

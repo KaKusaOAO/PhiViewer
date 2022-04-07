@@ -56,17 +56,17 @@ namespace Phi.Viewer.View
             var viewer = PhiViewer.Instance;
             if (IsOffscreen() && viewer.ForceRenderOffscreen) return;
 
-            var renderer = viewer.Renderer;
-            var ratio = viewer.NoteRatio;
-            var yPos = Parent.GetYPosWithGame(Model.Time);
-            var xPos = GetXPos();
-
-            var w = NoteWidth * ratio;
-            var h = Parent.GetYPosWithGame(Model.Time + Model.HoldTime) - Parent.GetYPosWithGame(Model.Time);
-
             var gt = Parent.GetConvertedGameTime(viewer.Time);
             if (gt <= Model.Time + Model.HoldTime)
             {
+                var renderer = viewer.Renderer;
+                var ratio = viewer.NoteRatio;
+                var yPos = Parent.GetYPosWithGame(Model.Time);
+                var xPos = GetXPos();
+
+                var w = NoteWidth * ratio;
+                var h = Parent.GetYPosWithGame(Model.Time + Model.HoldTime) - Parent.GetYPosWithGame(Model.Time);
+                
                 var headH = (float) _textureHead.Height / _textureHead.Width * w;
                 var endH = (float) _textureEnd.Height / _textureEnd.Width * w;
                 renderer.DrawTexture(_textureEnd, -w / 2 + xPos, -yPos - h, w, endH);

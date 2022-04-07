@@ -168,7 +168,7 @@ namespace Phi.Viewer.View
             return new Vector2(x, y);
         }
 
-        public void RenderShortNotes()
+        public void RenderNotes(Predicate<AbstractNoteView> predicate)
         {
             var viewer = PhiViewer.Instance;
             var renderer = viewer.Renderer;
@@ -193,52 +193,7 @@ namespace Phi.Viewer.View
                 var doClip = (speed < 0 || n.DoesClipOnPositiveSpeed) &&
                              (!n.IsOffscreen() || viewer.ForceRenderOffscreen);
 
-                if (doClip)
-                {
-                    renderer.EnableClip();
-                    renderer.ClipRect(-cw, -ch * 2, cw * 2, ch * 2);
-                }
-                
-                n.Render();
-
-                if (doClip)
-                {
-                     renderer.ClearClip();
-                }
-            }
-
-            foreach (var n in NotesAbove.Where(n => !(n is HoldNoteView))) RenderChildNote(n);
-            renderer.Scale(1, -1);
-            foreach (var n in NotesBelow.Where(n => !(n is HoldNoteView))) RenderChildNote(n);
-
-            renderer.Transform = t;
-        }
-        
-        public void RenderHoldNotes()
-        {
-            var viewer = PhiViewer.Instance;
-            var renderer = viewer.Renderer;
-            var cw = viewer.WindowSize.Width - viewer.RenderXPad * 2;
-            var ch = viewer.WindowSize.Height;
-            
-            var t = renderer.Transform;
-            var time = viewer.Time; 
-
-            var linePos = GetScaledPos(GetLinePos(time));
-            var lineRot = -GetLineRotation(time) / 180 * MathF.PI;
-            
-            renderer.Translate(linePos.X, linePos.Y);
-            renderer.Rotate(lineRot);
-
-            void RenderChildNote(AbstractNoteView n)
-            {
-                n.Update();
-                if (n.IsOffscreen() && !viewer.ForceRenderOffscreen) return;
-
-                var speed = GetSpeed(time);
-                var doClip = (speed < 0 || n.DoesClipOnPositiveSpeed) &&
-                             (!n.IsOffscreen() || viewer.ForceRenderOffscreen);
-
+                renderer.CommandList.PushDebugGroup("RenderChildNote");
                 if (doClip)
                 {
                     renderer.PushClip();
@@ -249,13 +204,14 @@ namespace Phi.Viewer.View
 
                 if (doClip)
                 {
-                    renderer.PopClip();
+                     renderer.PopClip();
                 }
+                renderer.CommandList.PopDebugGroup();
             }
 
-            foreach (var n in NotesAbove.Where(n => n is HoldNoteView)) RenderChildNote(n);
+            foreach (var n in NotesAbove.Where(n => predicate(n))) RenderChildNote(n);
             renderer.Scale(1, -1);
-            foreach (var n in NotesBelow.Where(n => n is HoldNoteView)) RenderChildNote(n);
+            foreach (var n in NotesBelow.Where(n => predicate(n))) RenderChildNote(n);
 
             renderer.Transform = t;
         }

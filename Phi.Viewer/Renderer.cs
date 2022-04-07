@@ -1,24 +1,56 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Numerics;
-using System.Resources;
-using System.Text;
+using System.Runtime.InteropServices;
+using FreeTypeSharp;
+using FreeTypeSharp.Native;
 using Phi.Resources;
-using SharpDX;
+using Phi.Viewer.View;
 using Veldrid;
 using Veldrid.SPIRV;
 using Veldrid.Utilities;
+using Color = System.Drawing.Color;
 using ResourceSet = Veldrid.ResourceSet;
+
+using static FreeTypeSharp.Native.FT;
 
 namespace Phi.Viewer
 {
     public class Renderer
     {
+        private struct ClipStateEntry : IDisposable
+        {
+            public Texture Texture;
+            public Texture Depth;
+            public Framebuffer Framebuffer;
+            public Pipeline Pipeline;
+
+            public void Dispose()
+            {
+                Texture?.Dispose();
+                Depth?.Dispose();
+                Framebuffer?.Dispose();
+                Pipeline?.Dispose();
+            }
+        }
+        
+        private struct DrawableCharacter
+        {
+            public Texture Texture;
+            public Vector2 Size;
+            public Vector2 Bearing;
+            public float Advance;
+        }
+        
         public PhiViewer Viewer { get; }
         
         public GraphicsDevice GraphicsDevice => Viewer.Host.Window.GraphicsDevice;
-        
+
+        public DisposeCollectorResourceFactory Factory { get; private set; }
+
         public CommandList CommandList { get; private set; }
 
         private Matrix4x4 _transform;
@@ -28,32 +60,43 @@ namespace Phi.Viewer
         private GraphicsPipelineDescription _mainPD;
         private Pipeline _pipeline;
         
-        private DeviceBuffer _indexBuffer;
+        private DeviceBuffer _quadIndexBuffer;
         
         private Shader[] _shaders;
         private Shader[] _shadersClip;
         private ResourceLayout _fragLayout;
         private ResourceLayout _fragLayoutClip;
         private ResourceLayout _vertLayout;
+        private VertexLayoutDescription _vertexLayoutDesc;
         
         // Clip framebuffer
-        private Stack<Texture> _clipStack = new Stack<Texture>();
-        // private Texture _clipColor;
-        private Texture _clipDepth;
-        private Framebuffer _clipFramebuffer;
-        private Pipeline _clipPipeline;
-
+        private List<ClipStateEntry> _clipStack = new List<ClipStateEntry>();
+        private int _clipLevel;
+        
         private Texture _renderColor;
+        private Texture _renderColorResolved;
         private Texture _renderDepth;
         private Framebuffer _renderTarget;
         private Pipeline _mainPipeline;
 
         internal Texture RenderTargetTexture => _renderColor;
+        
+        internal Texture ResolvedRenderTargetTexture => _renderColorResolved;
         internal Texture RenderTargetDepth => _renderDepth;
         internal Texture ClipBufferTexture => _renderDepth;
         internal Texture ClipBufferDepth => _renderDepth;
 
         private bool _isClipping;
+
+        private FreeTypeLibrary _ft;
+
+        private IntPtr _fontFace = IntPtr.Zero;
+
+        private IntPtr _memFont = IntPtr.Zero;
+
+        private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
+
+        public bool NeedsUpdateRenderTarget { get; set; }
         
         public Renderer(PhiViewer viewer)
         {
@@ -68,23 +111,25 @@ namespace Phi.Viewer
 
         private void CreateResources()
         {
-            var factory = GraphicsDevice.ResourceFactory;
+            Factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
 
-            ushort[] quadIndices = { 0, 1, 2, 3 };
-            BufferDescription ibDescription = new BufferDescription(
-                4 * sizeof(ushort),
+            ushort[] quadIndices = { 0, 1, 2, 2, 1, 3 };
+            var ibDescription = new BufferDescription(
+                6 * sizeof(ushort),
                 BufferUsage.IndexBuffer);
-            _indexBuffer = factory.CreateBuffer(ibDescription);
-            GraphicsDevice.UpdateBuffer(_indexBuffer, 0, quadIndices);
+            _quadIndexBuffer = Factory.CreateBuffer(ibDescription);
+            _quadIndexBuffer.Name = "Quad Index Buffer";
+            GraphicsDevice.UpdateBuffer(_quadIndexBuffer, 0, quadIndices);
 
-            VertexLayoutDescription vertexLayout = new VertexLayoutDescription(
+            var vertexLayout = new VertexLayoutDescription(
                 new VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2),
                 new VertexElementDescription("TextureCoordinates", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2));
+            _vertexLayoutDesc = vertexLayout;
 
             var asm = ResourceHelper.Assembly;
-            var fsh = asm.GetManifestResourceStream("Phi.Resources.Shaders.Textured.fsh");
-            var fshClip = asm.GetManifestResourceStream("Phi.Resources.Shaders.ClipMap.fsh");
-            var vsh = asm.GetManifestResourceStream("Phi.Resources.Shaders.Basic.vsh");
+            using var fsh = asm.GetManifestResourceStream("Phi.Resources.Shaders.Textured.fsh");
+            using var fshClip = asm.GetManifestResourceStream("Phi.Resources.Shaders.ClipMap.fsh");
+            using var vsh = asm.GetManifestResourceStream("Phi.Resources.Shaders.Basic.vsh");
 
             var fshBuffer = new byte[fsh.Length];
             fsh.Read(fshBuffer, 0, fshBuffer.Length);
@@ -97,13 +142,13 @@ namespace Phi.Viewer
             var fragmentShaderDesc = new ShaderDescription(ShaderStages.Fragment, fshBuffer, "main");
             var fragmentClipShaderDesc = new ShaderDescription(ShaderStages.Fragment, fshClipBuffer, "main");
 
-            _shaders = factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc);
-            _shadersClip = factory.CreateFromSpirv(vertexShaderDesc, fragmentClipShaderDesc);
+            _shaders = Factory.CreateFromSpirv(vertexShaderDesc, fragmentShaderDesc);
+            _shadersClip = Factory.CreateFromSpirv(vertexShaderDesc, fragmentClipShaderDesc);
 
-            _vertLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
+            _vertLayout = Factory.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("Transform", ResourceKind.UniformBuffer, ShaderStages.Vertex)));
             
-            _fragLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
+            _fragLayout = Factory.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("Input", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("Sampler", ResourceKind.Sampler, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("Tint", ResourceKind.UniformBuffer, ShaderStages.Fragment),
@@ -111,7 +156,7 @@ namespace Phi.Viewer
                 new ResourceLayoutElementDescription("ClipMapSampler", ResourceKind.Sampler, ShaderStages.Fragment)
                 ));
             
-            _fragLayoutClip = factory.CreateResourceLayout(new ResourceLayoutDescription
+            _fragLayoutClip = Factory.CreateResourceLayout(new ResourceLayoutDescription
             {
                 Elements = Array.Empty<ResourceLayoutElementDescription>()
             });
@@ -119,6 +164,8 @@ namespace Phi.Viewer
             // Create pipeline
             _pipelineDescription = new GraphicsPipelineDescription();
             _pipelineDescription.BlendState = BlendStateDescription.SingleAlphaBlend;
+            _pipelineDescription.BlendState.AttachmentStates[0].SourceAlphaFactor = BlendFactor.One;
+            _pipelineDescription.BlendState.AttachmentStates[0].DestinationAlphaFactor = BlendFactor.One;
             _pipelineDescription.DepthStencilState = new DepthStencilStateDescription(false, false, ComparisonKind.Always,
                 false, 
                 new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
@@ -126,7 +173,7 @@ namespace Phi.Viewer
                 0, 0, 0);
             _pipelineDescription.RasterizerState = new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, 
                 FrontFace.Clockwise, false, false);
-            _pipelineDescription.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
+            _pipelineDescription.PrimitiveTopology = PrimitiveTopology.TriangleList;
             _pipelineDescription.ResourceLayouts = new [] { _vertLayout, _fragLayout };
             _pipelineDescription.ShaderSet = new ShaderSetDescription(
                 vertexLayouts: new[] { vertexLayout },
@@ -146,8 +193,10 @@ namespace Phi.Viewer
             _mainPD.ShaderSet = new ShaderSetDescription(
                 vertexLayouts: new[] { vertexLayout },
                 shaders: _shaders);
-            _mainPD.Outputs = GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription;
-            _mainPipeline = factory.CreateGraphicsPipeline(_mainPD);
+
+            _mainPD.Outputs = GraphicsDevice.SwapchainFramebuffer.OutputDescription;
+            _mainPipeline = Factory.CreateGraphicsPipeline(_mainPD);
+            _mainPipeline.Name = "Main Swapchain Pipeline";
 
             // Clip
             _clipPD = new GraphicsPipelineDescription();
@@ -164,49 +213,147 @@ namespace Phi.Viewer
                 vertexLayouts: new[] { vertexLayout },
                 shaders: _shadersClip);
 
-            CommandList = factory.CreateCommandList();
+            CommandList = Factory.CreateCommandList();
+
+            Factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
             UpdateRenderTarget();
+            
+            // FreeType
+            var fontStream = asm.GetManifestResourceStream("Phi.Resources.Fonts.Saira.ttf");
+            var buffer = new byte[fontStream!.Length];
+            fontStream.Read(buffer, 0, buffer.Length);
+            fontStream.Dispose();
+            
+            _memFont = Marshal.AllocHGlobal(buffer.Length);
+            Marshal.Copy(buffer, 0, _memFont, buffer.Length);
+
+            _ft = new FreeTypeLibrary();
+            if (FT_New_Memory_Face(_ft.Native, _memFont, buffer.Length, 0, out _fontFace) != FT_Error.FT_Err_Ok)
+            {
+                _ft.Dispose();
+                _ft = null;
+            }
+            else
+            {
+                FT_Set_Pixel_Sizes(_fontFace, 0, 48);
+            }
         }
 
         private void UpdateRenderTarget()
         {
-            var factory = GraphicsDevice.ResourceFactory;
+            var factory = Factory;
             var window = Viewer.Host.Window;
+            var resolutionScale = 1f;
+
+            if (!NeedsUpdateRenderTarget && _renderColor?.Width == (uint)(window.Width * resolutionScale)
+                && _renderColor?.Height == (uint)(window.Height * resolutionScale)) return;
+
+            NeedsUpdateRenderTarget = false;
+
+            var renderColorDesc = TextureDescription.Texture2D(
+                (uint)(window.Width * resolutionScale),
+                (uint)(window.Height * resolutionScale),
+                1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+                TextureUsage.RenderTarget | TextureUsage.Sampled);
+            
+            var sampleCount = TextureSampleCount.Count4;
+            GraphicsDevice.GetPixelFormatSupport(renderColorDesc.Format, renderColorDesc.Type, renderColorDesc.Usage,
+                out var properties);
+            while (!properties.IsSampleCountSupported(sampleCount)) sampleCount--;
+            renderColorDesc.SampleCount = sampleCount;
             
             _renderColor?.Dispose();
-            _renderDepth?.Dispose();
-            _renderTarget?.Dispose();
-            _pipeline?.Dispose();
-            foreach (var texture in _clipStack)
+            _renderColor = factory.CreateTexture(renderColorDesc);
+            _renderColor.Name = "Render Target Color";
+            factory.DisposeCollector.Remove(_renderColor);
+
+            _renderColorResolved?.Dispose();
+            if (sampleCount != TextureSampleCount.Count1)
             {
-                texture.Dispose();
+                renderColorDesc.SampleCount = TextureSampleCount.Count1;
+                _renderColorResolved = factory.CreateTexture(renderColorDesc);
+                _renderColorResolved.Name = "Resolved Render Target Color";
+                _renderColor.Name = "Render Target Color";
             }
-            _clipStack.Clear();
-            _clipDepth?.Dispose();
-            _clipFramebuffer?.Dispose();
-            _clipPipeline?.Dispose();
-            _mainPipeline?.Dispose();
+            else
+            {
+                _renderColorResolved = factory.CreateTexture(renderColorDesc);
+                _renderColorResolved.Name = "Resolved Render Target Color";
+            }
+            factory.DisposeCollector.Remove(_renderColorResolved);
+
+            _renderDepth?.Dispose();
+            _renderDepth = factory.CreateTexture(TextureDescription.Texture2D(
+                (uint) (window.Width * resolutionScale), 
+                (uint) (window.Height * resolutionScale), 
+                1, 1, PixelFormat.R16_UNorm,
+                TextureUsage.DepthStencil | TextureUsage.Sampled, 
+                sampleCount));
+            _renderDepth.Name = "Render Target Depth";
+            factory.DisposeCollector.Remove(_renderDepth);
             
-            _renderColor = factory.CreateTexture(TextureDescription.Texture2D((uint) window.Width, (uint) window.Height, 1, 1,
-                PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.RenderTarget | TextureUsage.Sampled));
-            _renderDepth = factory.CreateTexture(TextureDescription.Texture2D((uint) window.Width, (uint) window.Height, 1, 1, PixelFormat.R16_UNorm,
-                TextureUsage.DepthStencil | TextureUsage.Sampled));
+            _renderTarget?.Dispose();
             _renderTarget = factory.CreateFramebuffer(new FramebufferDescription(_renderDepth, _renderColor));
+            _renderTarget.Name = "Render Target Framebuffer";
+            factory.DisposeCollector.Remove(_renderTarget);
+            
+            _pipeline?.Dispose();
             _pipelineDescription.Outputs = _renderTarget.OutputDescription;
             _pipeline = factory.CreateGraphicsPipeline(_pipelineDescription);
+            _pipeline.Name = "Render Target Pipeline";
+            factory.DisposeCollector.Remove(_pipeline);
 
-            var clipColor = factory.CreateTexture(TextureDescription.Texture2D((uint) window.Width, (uint) window.Height, 1, 1,
-                PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.RenderTarget | TextureUsage.Sampled | TextureUsage.Storage));
-            _clipDepth = factory.CreateTexture(TextureDescription.Texture2D((uint) window.Width, (uint) window.Height, 1, 1, PixelFormat.R16_UNorm,
-                TextureUsage.DepthStencil | TextureUsage.Sampled | TextureUsage.Storage));
-            _clipStack.Push(clipColor);
+            for (var i = 0; i < _clipStack.Count; i++)
+            {
+                _clipStack[i].Dispose();
+                _clipStack[i] = CreateClipEntry();
+            }
+
+            if (!_clipStack.Any())
+            {
+                _clipStack.Add(CreateClipEntry());
+            }
+        }
+
+        private ClipStateEntry CreateClipEntry()
+        {
+            var factory = Factory;
+            var window = Viewer.Host.Window;
+            var resolutionScale = 1f;
             
-            _clipFramebuffer = factory.CreateFramebuffer(new FramebufferDescription(_clipDepth, clipColor));
-            _clipPD.Outputs = _clipFramebuffer.OutputDescription;
-            _clipPipeline = factory.CreateGraphicsPipeline(_clipPD);
+            var clipColor = factory.CreateTexture(TextureDescription.Texture2D(
+                (uint)(window.Width * resolutionScale),
+                (uint)(window.Height * resolutionScale),
+                1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+                TextureUsage.RenderTarget | TextureUsage.Sampled));
+            clipColor.Name = $"Clip Map Color (depth:{_clipStack.Count})";
             
-            _mainPD.Outputs = GraphicsDevice.SwapchainFramebuffer.OutputDescription;
-            _mainPipeline = factory.CreateGraphicsPipeline(_mainPD);
+            var clipDepth = factory.CreateTexture(TextureDescription.Texture2D(
+                (uint)(window.Width * resolutionScale),
+                (uint)(window.Height * resolutionScale),
+                1, 1, PixelFormat.D24_UNorm_S8_UInt,
+                TextureUsage.DepthStencil | TextureUsage.Sampled));
+            clipDepth.Name = $"Clip Map Depth (depth:{_clipStack.Count})";
+
+            var clipFramebuffer = factory.CreateFramebuffer(new FramebufferDescription(clipDepth, clipColor));
+            clipFramebuffer.Name = $"Clip Map Framebuffer (depth:{_clipStack.Count})";
+
+            _clipPD.Outputs = clipFramebuffer.OutputDescription;
+            var clipPipeline = factory.CreateGraphicsPipeline(_clipPD);
+            clipPipeline.Name = $"Clip Map Pipeline (depth:{_clipStack.Count})";
+            
+            factory.DisposeCollector.Remove(clipColor);
+            factory.DisposeCollector.Remove(clipDepth);
+            factory.DisposeCollector.Remove(clipPipeline);
+            factory.DisposeCollector.Remove(clipFramebuffer);
+
+            return new ClipStateEntry
+            {
+                Framebuffer = clipFramebuffer,
+                Pipeline = clipPipeline,
+                Texture = clipColor,
+                Depth = clipDepth
+            };
         }
 
         public void Begin()
@@ -223,11 +370,12 @@ namespace Phi.Viewer
             CommandList.SetFramebuffer(_renderTarget);
             CommandList.SetPipeline(_pipeline);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            CommandList.SetIndexBuffer(_indexBuffer, IndexFormat.UInt16);
             CommandList.SetViewport(0, new Viewport(0, 0, window.Width, window.Height, 0, 1));
         }
+        
         public void DrawQuad(float x, float y, float width, float height)
         {
+            CommandList.PushDebugGroup("DrawQuad");
             Vector4[] quadVerts =
             {
                 new Vector4(x, y, 0, 0),
@@ -237,12 +385,14 @@ namespace Phi.Viewer
             };
             BufferDescription vbDescription = new BufferDescription(64, BufferUsage.VertexBuffer);
             
-            using var vertexBuffer = GraphicsDevice.ResourceFactory.CreateBuffer(vbDescription);
+            var factory = Factory;
+            var vertexBuffer = factory.CreateBuffer(vbDescription);
+            vertexBuffer.Name = "Quad Vertex Buffer";
             GraphicsDevice.UpdateBuffer(vertexBuffer, 0, quadVerts);
             CommandList.SetVertexBuffer(0, vertexBuffer);
             
-            var factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
-            using var matrixInfoBuffer = factory.CreateBuffer(new BufferDescription(MatrixInfo.SizeInBytes, BufferUsage.UniformBuffer));
+            var matrixInfoBuffer = factory.CreateBuffer(new BufferDescription(MatrixInfo.SizeInBytes, BufferUsage.UniformBuffer));
+            matrixInfoBuffer.Name = "Quad Vertex Buffer - Matrix Info";
             GraphicsDevice.UpdateBuffer(
                 matrixInfoBuffer, 0, new MatrixInfo
                 {
@@ -250,77 +400,107 @@ namespace Phi.Viewer
                     Resolution = new Vector2(Viewer.WindowSize.Width, Viewer.WindowSize.Height)
                 });
             
-            using var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
+            var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
                 _vertLayout, matrixInfoBuffer));
+            resourceSet.Name = "Quad Vertex Layout Resource Set";
+            
             CommandList.SetGraphicsResourceSet(0, resourceSet);
-            CommandList.DrawIndexed(4);
+            CommandList.SetIndexBuffer(_quadIndexBuffer, IndexFormat.UInt16);
+            CommandList.DrawIndexed(6);
+            CommandList.PopDebugGroup();
         }
 
         public void DrawTexture(Texture texture, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
-            var factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
-            using var view = factory.CreateTextureView(texture);
+            CommandList.PushDebugGroup("DrawTexture");
+            var factory = Factory;
+            var view = factory.CreateTextureView(texture);
+            view.Name = texture.Name + " (Generated View)";
             DrawTexture(view, x, y, width, height, tintInfo);
+            CommandList.PopDebugGroup();
         }
 
         public void DrawToMainSwapchain()
         {
+            CommandList.PushDebugGroup("DrawToMainSwapchain");
+            if (_renderColor.SampleCount != TextureSampleCount.Count1)
+            {
+                CommandList.ResolveTexture(_renderColor, _renderColorResolved);
+            }
+            else
+            {
+                CommandList.CopyTexture(_renderColor, _renderColorResolved);
+            }
+
             CommandList.SetFramebuffer(GraphicsDevice.SwapchainFramebuffer);
             CommandList.SetPipeline(_mainPipeline);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            DrawTexture(_renderColor, 0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
+            DrawTexture(_renderColorResolved, 0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
+            CommandList.PopDebugGroup();
         }
         
         public void DrawTexture(TextureView view, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
-            var factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
-            using var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
+            CommandList.PushDebugGroup("DrawTextureView");
+            var factory = Factory;
+            var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
+            tintInfoBuffer.Name = "Texture TintInfo Uniform Buffer";
             GraphicsDevice.UpdateBuffer(
                 tintInfoBuffer, 0,
                 tintInfo ?? new TintInfo(new Vector3(1f, 1f, 1f), 0f, 1f));
 
-            using var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
-                _fragLayout, view, GraphicsDevice.PointSampler, tintInfoBuffer, _clipStack.Peek(), GraphicsDevice.PointSampler));
+            var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
+                _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, _clipStack[_clipLevel].Texture, GraphicsDevice.LinearSampler));
+            resourceSet.Name = "Texture Fragment Resource Set";
             CommandList.SetGraphicsResourceSet(1, resourceSet);
             
             DrawQuad(x, y, width, height);
+            CommandList.PopDebugGroup();
         }
         
         public void DrawRect(Color color, float x, float y, float width, float height)
         {
-            var factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
-            using var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
+            CommandList.PushDebugGroup("DrawRect");
+            var factory = Factory;
+            var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
+            tintInfoBuffer.Name = "Solid Color TintInfo Uniform Buffer";
             GraphicsDevice.UpdateBuffer(
                 tintInfoBuffer, 0,
                 new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 1, color.A / 255f));
 
-            using var tex = factory.CreateTexture(new TextureDescription(1, 1, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+            var tex = factory.CreateTexture(new TextureDescription(1, 1, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                 TextureUsage.Sampled, TextureType.Texture2D));
-            using var view = factory.CreateTextureView(tex);
+            tex.Name = "Solid Color Texture";
+            var view = factory.CreateTextureView(tex);
+            view.Name = "Solid Color TextureView";
 
             ResourceSet resourceSet;
             if (!_isClipping)
             {
                 resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
-                    _fragLayout, view, GraphicsDevice.PointSampler, tintInfoBuffer, _clipStack.Peek(),
-                    GraphicsDevice.PointSampler));
+                    _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, _clipStack[_clipLevel].Texture,
+                    GraphicsDevice.LinearSampler));
+                resourceSet.Name = "Solid Color Fragment Resource Set";
                 CommandList.SetGraphicsResourceSet(1, resourceSet);
             }
             else
             {
                 resourceSet = factory.CreateResourceSet(new ResourceSetDescription(_fragLayoutClip));
+                resourceSet.Name = "Clip Map Fragment Resource Set";
                 CommandList.SetGraphicsResourceSet(1, resourceSet);
             }
             
             DrawQuad(x, y, width, height);
-            resourceSet.Dispose();
+            CommandList.PopDebugGroup();
         }
+        
         public void Render()
         {
             CommandList.End();
             GraphicsDevice.SubmitCommands(CommandList);
             GraphicsDevice.SwapBuffers();
             
+            Factory.DisposeCollector.DisposeAll();
             UpdateRenderTarget();
             GC.Collect();
         }
@@ -358,61 +538,152 @@ namespace Phi.Viewer
             _transform *= mult;
         }
 
-        public void EnableClip()
-        {
-            CommandList.SetFramebuffer(_clipFramebuffer);
-            CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            CommandList.SetFramebuffer(_renderTarget);
-        }
-
         public void PushClip()
         {
-            var factory = GraphicsDevice.ResourceFactory;
+            CommandList.PushDebugGroup("Clip");
+            var factory = Factory;
+            var old = _clipStack[_clipLevel].Texture;
             
-            var old = _clipStack.Peek();
-            var clipColor = factory.CreateTexture(TextureDescription.Texture2D(old.Width, old.Height, 1, 1,
-                PixelFormat.R8_G8_B8_A8_UNorm, TextureUsage.RenderTarget | TextureUsage.Sampled | TextureUsage.Storage));
-            CommandList.CopyTexture(old, clipColor);
-            _clipStack.Push(clipColor);
-            
-            UpdateClipFramebufferTarget();
+            if (_clipStack.Count != ++_clipLevel)
+            {
+                var newClip = _clipStack[_clipLevel].Texture;
+                CommandList.CopyTexture(old, newClip);
+                return;
+            }
+
+            var entry = CreateClipEntry();
+            CommandList.CopyTexture(old, entry.Texture);
+            _clipStack.Add(entry);
         }
 
         public void PopClip()
         {
-            var tex = _clipStack.Pop();
-            tex.Dispose();
-            UpdateClipFramebufferTarget();
-        }
-
-        private void UpdateClipFramebufferTarget()
-        {
-            var factory = GraphicsDevice.ResourceFactory;
-            var clipColor = _clipStack.Peek();
-            
-            _clipPipeline?.Dispose();
-            _clipFramebuffer = factory.CreateFramebuffer(new FramebufferDescription(_clipDepth, clipColor));
-            _clipPD.Outputs = _clipFramebuffer.OutputDescription;
-            _clipPipeline = factory.CreateGraphicsPipeline(_clipPD);
+            if (_clipLevel == 0) return;
+            _clipLevel--;
+            CommandList.PopDebugGroup();
         }
 
         public void ClipRect(float x, float y, float width, float height)
         {
+            CommandList.PushDebugGroup("ClipRect");
             _isClipping = true;
-            CommandList.SetFramebuffer(_clipFramebuffer);
-            CommandList.SetPipeline(_clipPipeline);
-            DrawRect(Color.White, x, y, width, height);
+            
+            var entry = _clipStack[_clipLevel];
+            CommandList.SetFramebuffer(entry.Framebuffer);
+            CommandList.SetPipeline(entry.Pipeline);
+
+            var p = Viewer.WindowSize.Width + Viewer.WindowSize.Height;
+            p += width + height;
+            DrawRect(Color.Black, x - p, y,       p, p);
+            DrawQuad(x, y + height,               p, p);
+            DrawQuad(x + width, y + height - p, p, p);
+            DrawQuad(x - p, y - p,              p * 2, p);
             
             _isClipping = false;
             CommandList.SetFramebuffer(_renderTarget);
             CommandList.SetPipeline(_pipeline);
+            CommandList.PopDebugGroup();
         }
         
         public void ClearClip()
         {
-            CommandList.SetFramebuffer(_clipFramebuffer);
+            var entry = _clipStack[_clipLevel];
+            CommandList.SetFramebuffer(entry.Framebuffer);
             CommandList.ClearColorTarget(0, RgbaFloat.White);
             CommandList.SetFramebuffer(_renderTarget);
+        }
+
+        public SizeF MeasureText(string text, float fontSize)
+        {
+            var x = 0f;
+            var y = 0f;
+            var scale = fontSize / 48;
+            
+            foreach (var c in text)
+            {
+                var chn = GetDrawableCharacter(c);
+                if (chn == null) continue;
+
+                var ch = chn.Value;
+                var yPos = y - ch.Bearing.Y * scale;
+                var w = ch.Size.X * scale;
+                var h = ch.Size.Y * scale;
+                x += w + fontSize * 0.1f;
+                y = MathF.Max(y, yPos + h);
+            }
+            
+            return new SizeF(x, y);
+        }
+
+        private DrawableCharacter? GetDrawableCharacter(char c)
+        {
+            var factory = Factory;
+            if (!_characters.ContainsKey(c))
+            {
+                if (FT_Load_Char(_fontFace, c, FT_LOAD_RENDER) != FT_Error.FT_Err_Ok) return null;
+
+                var face = new FreeTypeFaceFacade(_ft, _fontFace);
+                var texture = factory.CreateTexture(new TextureDescription(
+                    face.GlyphBitmap.width, face.GlyphBitmap.rows, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+                    TextureUsage.Sampled, TextureType.Texture2D));
+                texture.Name = $"Saira-char: {c}";
+                factory.DisposeCollector.Remove(texture);
+                
+                var size = (face.GlyphBitmap.width + 2) * (face.GlyphBitmap.rows + 2) * 4;
+                var buffer = new byte[size];
+
+                for (var ty = 1; ty < face.GlyphBitmap.rows; ty++)
+                {
+                    for (var tx = 1; tx < face.GlyphBitmap.width; tx++)
+                    {
+                        var px = Marshal.ReadByte(face.GlyphBitmap.buffer, (int) ((ty - 1) * face.GlyphBitmap.width +
+                            (tx - 1)));
+                        var idx = ty * face.GlyphBitmap.width * 4 + tx * 4;
+                        buffer[idx+0] = 255;
+                        buffer[idx+1] = 255;
+                        buffer[idx+2] = 255;
+                        buffer[idx+3] = px;
+                    }
+                }
+
+                GraphicsDevice.UpdateTexture(texture, buffer, 0, 0, 0, face.GlyphBitmap.width,
+                    face.GlyphBitmap.rows, 1, 0, 0);
+
+                _characters.Add(c, new DrawableCharacter
+                {
+                    Texture = texture,
+                    Size = new Vector2(face.GlyphBitmap.width, face.GlyphBitmap.rows),
+                    Bearing = new Vector2(face.GlyphBitmapLeft, face.GlyphBitmapTop),
+                    Advance = face.Ascender / 64f * 5
+                });
+            }
+
+            return _characters[c];
+        }
+        
+        public void DrawText(string text, Color color, float fontSize, float x, float y)
+        {
+            if (_ft == null) return;
+            
+            var scale = fontSize / 48;
+            
+            CommandList.PushDebugGroup("DrawText");
+            foreach (var c in text)
+            {
+                var chn = GetDrawableCharacter(c);
+                if (chn == null) continue;
+
+                var ch = chn.Value;
+                var xPos = x + ch.Bearing.X * scale;
+                var yPos = y - ch.Bearing.Y * scale;
+                var w = ch.Size.X * scale;
+                var h = ch.Size.Y * scale;
+                x += w + fontSize * 0.1f;
+
+                DrawTexture(ch.Texture, xPos, yPos, w, h,
+                    new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 0, color.A / 255f));
+            }
+            CommandList.PopDebugGroup();
         }
     }
     

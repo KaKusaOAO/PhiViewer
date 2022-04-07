@@ -1,9 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using ImGuiNET;
-using Phi.Viewer.View;
 using Veldrid;
-using Veldrid.Utilities;
 
 namespace Phi.Viewer
 {
@@ -43,7 +41,7 @@ namespace Phi.Viewer
             if (ImGui.Begin("Control"))
             {
                 var p = viewer.PlaybackTime;
-                ImGui.SliderFloat("Playback Time", ref p, 0, 133000);
+                ImGui.SliderFloat("Playback Time", ref p, 0, 157760);
                 viewer.PlaybackTime = p;
                 
                 ImGui.SameLine();
@@ -66,18 +64,29 @@ namespace Phi.Viewer
                 bl = viewer.UseUniqueSpeed;
                 ImGui.Checkbox("Use Unique Speed", ref bl);
                 viewer.UseUniqueSpeed = bl;
+
+                bl = viewer.DisableGlobalClip;
+                ImGui.Checkbox("Disable Global Clip", ref bl);
+                viewer.DisableGlobalClip = bl;
+
+                var vec2 = viewer.CanvasTranslate;
+                ImGui.DragFloat2("Canvas Translate", ref vec2);
+                viewer.CanvasTranslate = vec2;
                 
-                ImGui.End();
-            }
-            
-            if (ImGui.Begin("Game"))
-            {
-                var factory = device.ResourceFactory;
-                var texture = viewer.Renderer.RenderTargetTexture;
-                ImGui.Image(renderer.GetOrCreateImGuiBinding(factory, texture),
-                    new Vector2(texture.Width / 1.5f,  texture.Height / 1.5f),
-                    new Vector2(0, 1), new Vector2(1, 0));
-                ImGui.SetWindowSize(new Vector2(texture.Width / 1.5f + 10,  texture.Height / 1.5f + 40));
+                if (ImGui.Button("Reset Translate"))
+                {
+                    viewer.CanvasTranslate = Vector2.Zero;
+                }
+
+                p = viewer.CanvasScale;
+                ImGui.SliderFloat("Canvas Scale", ref p, 0.5f, 2f);
+                viewer.CanvasScale = p;
+
+                if (ImGui.Button("Reset Scale"))
+                {
+                    viewer.CanvasScale = 1;
+                }
+                
                 ImGui.End();
             }
             renderer.Render(device, list);

@@ -6,6 +6,8 @@
 ## 待辦事項
 - [x] 基本繪圖功能 (quad, rect, textured rect, transform)
 - [x] 讀取譜面資訊並繪製
+- [x] Clip buffer stack
+- [x] 處理記憶體洩漏的問題
+- [x] 基本文字繪製
+- [ ] 效能優化?
 - [ ] 支援 floorPosition
-- [ ] 處理記憶體洩漏的問題
-- [ ] Clip buffer stack

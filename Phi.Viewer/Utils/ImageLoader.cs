@@ -6,7 +6,9 @@ namespace Phi.Viewer.Utils
 {
     public static class ImageLoader
     {
-        private static Texture LoadTextureFromPng(Png png)
+        private static ulong id = 0;
+        
+        private static Texture LoadTextureFromPng(Png png, string name = null)
         {
             var size = png.Width * png.Height * 4;
             var buffer = new byte[size];
@@ -24,28 +26,31 @@ namespace Phi.Viewer.Utils
                 }
             }
 
-            var viewer = PhiViewer.Instance;
-            var device = viewer.Renderer.GraphicsDevice;
-            var factory = device.ResourceFactory;
+            var renderer = PhiViewer.Instance.Renderer;
+            var device = renderer.GraphicsDevice;
+            var factory = renderer.Factory;
 
             var texture = factory.CreateTexture(TextureDescription.Texture2D((uint) png.Width, (uint) png.Height, 1, 1,
                 PixelFormat.R8_G8_B8_A8_UNorm,
                 TextureUsage.Sampled));
-            
+            texture.Name = name ?? $"ImageAsset-{id}";
+            id += 1;
+            factory.DisposeCollector.Remove(texture);
+                            
             device.UpdateTexture(texture, buffer, 0, 0, 0, (uint)png.Width, (uint)png.Height, 1, 0, 0);
             return texture;
         }
         
-        public static Texture LoadTextureFromStream(Stream stream)
+        public static Texture LoadTextureFromStream(Stream stream, string name = null)
         {
             var png = Png.Open(stream);
-            return LoadTextureFromPng(png);
+            return LoadTextureFromPng(png, name);
         }
         
         public static Texture LoadTextureFromPath(string path)
         {
             var png = Png.Open(path);
-            return LoadTextureFromPng(png);
+            return LoadTextureFromPng(png, path);
         }
     }
 }

@@ -8,6 +8,7 @@ using Phi.Resources;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
+using Color = System.Drawing.Color;
 
 namespace Phi.Viewer
 {
@@ -56,6 +57,12 @@ namespace Phi.Viewer
         public float DeltaTime { get; private set; }
 
         public float SeekSmoothness { get; set; } = 100;
+        
+        public bool DisableGlobalClip { get; set; }
+        
+        public Vector2 CanvasTranslate { get; set; }
+
+        public float CanvasScale { get; set; } = 1;
 
         public float NoteRatio
         {
@@ -129,21 +136,22 @@ namespace Phi.Viewer
         public void Render()
         {
             Renderer.Begin();
-            
             Renderer.Transform = Matrix4x4.Identity;
-            
-            Renderer.EnableClip();
-            Renderer.ClipRect(0, 0, WindowSize.Width, WindowSize.Height);
+            Renderer.Translate((WindowSize.Width - WindowSize.Width * CanvasScale) / 2, (WindowSize.Height - WindowSize.Height * CanvasScale) / 2);
+            Renderer.Translate(CanvasTranslate.X, CanvasTranslate.Y);
+            Renderer.Scale(CanvasScale, CanvasScale);
             
             RenderBack();
             RenderJudgeLines();
+            RenderUI();
             
+            Renderer.PushClip();
             Renderer.ClearClip();
-            
             Renderer.Transform = Matrix4x4.Identity;
             Renderer.Scale(1, -1);
             Renderer.Translate(0, -WindowSize.Height);
-            // Renderer.DrawToMainSwapchain();
+            Renderer.DrawToMainSwapchain();
+            Renderer.PopClip();
             
             Gui.Render(Renderer.GraphicsDevice, Renderer.CommandList);
             Renderer.Render();
@@ -157,7 +165,6 @@ namespace Phi.Viewer
             Renderer.DrawTexture(Background, 0, 0, WindowSize.Width, WindowSize.Height, new TintInfo(Vector3.One, 0, 0.4f));
             
             Renderer.PushClip();
-            Renderer.ClipRect(pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
 
             var iw = Background.Width;
             var ih = Background.Height;
@@ -171,26 +178,44 @@ namespace Phi.Viewer
 
         private void RenderJudgeLines()
         {
+            Renderer.CommandList.PushDebugGroup("RenderJudgeLines()");
+            
             var pad = RenderXPad;
             Renderer.PushClip();
-            Renderer.ClipRect(pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
-            
+            if (!DisableGlobalClip)
+            {
+                Renderer.ClipRect(pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
+            }
+
+            Renderer.CommandList.PushDebugGroup("RenderJudgeLines() -> RenderHoldNotes()");
             foreach (var line in Chart.JudgeLines)
             {
-                line.RenderHoldNotes();
+                line.RenderNotes(n => n is HoldNoteView);
             }
+            Renderer.CommandList.PopDebugGroup();
             
+            Renderer.CommandList.PushDebugGroup("RenderJudgeLines() -> RenderShortNotes()");
             foreach (var line in Chart.JudgeLines)
             {
-                line.RenderShortNotes();
+                line.RenderNotes(n => !(n is HoldNoteView));
             }
+            Renderer.CommandList.PopDebugGroup();
             
+            Renderer.CommandList.PushDebugGroup("RenderJudgeLines() -> RenderLine()");
             foreach (var line in Chart.JudgeLines)
             {
                 line.RenderLine();
             }
+            Renderer.CommandList.PopDebugGroup();
             
             Renderer.PopClip();
+            
+            Renderer.CommandList.PopDebugGroup();
+        }
+
+        private void RenderUI()
+        {
+            
         }
     }
 }

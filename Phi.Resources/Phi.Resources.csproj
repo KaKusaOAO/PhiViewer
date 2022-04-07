@@ -35,6 +35,12 @@
       <EmbeddedResource Include="Textures\Tap2HL.png" />
       <None Remove="Shaders\ClipMap.fsh" />
       <EmbeddedResource Include="Shaders\ClipMap.fsh" />
+      <None Remove="Fonts\Saira.ttf" />
+      <EmbeddedResource Include="Fonts\Saira.ttf" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Fonts" />
     </ItemGroup>
 
 </Project>
