@@ -215,7 +215,8 @@ namespace Phi.Viewer
 
         private void RenderUI()
         {
-            
+            Renderer.DrawText("Shine Bright Like a Diamond", Color.White, 24, 50, 50);
+            Renderer.DrawText("如果說你是夏夜的營火", Color.White, 32, 50, 100);
         }
     }
 }

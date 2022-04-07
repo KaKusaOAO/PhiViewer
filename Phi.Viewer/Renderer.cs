@@ -235,7 +235,7 @@ namespace Phi.Viewer
             }
             else
             {
-                FT_Set_Pixel_Sizes(_fontFace, 0, 48);
+                FT_Set_Pixel_Sizes(_fontFace, 0, 96);
             }
         }
 
@@ -597,7 +597,7 @@ namespace Phi.Viewer
         {
             var x = 0f;
             var y = 0f;
-            var scale = fontSize / 48;
+            var scale = fontSize / 96;
             
             foreach (var c in text)
             {
@@ -608,7 +608,7 @@ namespace Phi.Viewer
                 var yPos = y - ch.Bearing.Y * scale;
                 var w = ch.Size.X * scale;
                 var h = ch.Size.Y * scale;
-                x += w + fontSize * 0.1f;
+                x += c == ' ' ? fontSize * 0.33f : w + fontSize * 0.1f;
                 y = MathF.Max(y, yPos + h);
             }
             
@@ -623,13 +623,16 @@ namespace Phi.Viewer
                 if (FT_Load_Char(_fontFace, c, FT_LOAD_RENDER) != FT_Error.FT_Err_Ok) return null;
 
                 var face = new FreeTypeFaceFacade(_ft, _fontFace);
+                var w = Math.Max(1, face.GlyphBitmap.width);
+                var h = Math.Max(1, face.GlyphBitmap.rows);
+                
                 var texture = factory.CreateTexture(new TextureDescription(
-                    face.GlyphBitmap.width, face.GlyphBitmap.rows, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+                    w + 2, h + 2, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                     TextureUsage.Sampled, TextureType.Texture2D));
                 texture.Name = $"Saira-char: {c}";
                 factory.DisposeCollector.Remove(texture);
                 
-                var size = (face.GlyphBitmap.width + 2) * (face.GlyphBitmap.rows + 2) * 4;
+                var size = w * h * 4;
                 var buffer = new byte[size];
 
                 for (var ty = 1; ty < face.GlyphBitmap.rows; ty++)
@@ -638,7 +641,7 @@ namespace Phi.Viewer
                     {
                         var px = Marshal.ReadByte(face.GlyphBitmap.buffer, (int) ((ty - 1) * face.GlyphBitmap.width +
                             (tx - 1)));
-                        var idx = ty * face.GlyphBitmap.width * 4 + tx * 4;
+                        var idx = ty * w * 4 + tx * 4;
                         buffer[idx+0] = 255;
                         buffer[idx+1] = 255;
                         buffer[idx+2] = 255;
@@ -646,13 +649,13 @@ namespace Phi.Viewer
                     }
                 }
 
-                GraphicsDevice.UpdateTexture(texture, buffer, 0, 0, 0, face.GlyphBitmap.width,
-                    face.GlyphBitmap.rows, 1, 0, 0);
+                GraphicsDevice.UpdateTexture(texture, buffer, 1, 1, 0, w,
+                    h, 1, 0, 0);
 
                 _characters.Add(c, new DrawableCharacter
                 {
                     Texture = texture,
-                    Size = new Vector2(face.GlyphBitmap.width, face.GlyphBitmap.rows),
+                    Size = new Vector2(w, h),
                     Bearing = new Vector2(face.GlyphBitmapLeft, face.GlyphBitmapTop),
                     Advance = face.Ascender / 64f * 5
                 });
@@ -665,7 +668,7 @@ namespace Phi.Viewer
         {
             if (_ft == null) return;
             
-            var scale = fontSize / 48;
+            var scale = fontSize / 96;
             
             CommandList.PushDebugGroup("DrawText");
             foreach (var c in text)
@@ -678,10 +681,13 @@ namespace Phi.Viewer
                 var yPos = y - ch.Bearing.Y * scale;
                 var w = ch.Size.X * scale;
                 var h = ch.Size.Y * scale;
-                x += w + fontSize * 0.1f;
+                x += c == ' ' ? fontSize * 0.33f : w + fontSize * 0.1f;
 
-                DrawTexture(ch.Texture, xPos, yPos, w, h,
-                    new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 0, color.A / 255f));
+                if (c != ' ')
+                {
+                    DrawTexture(ch.Texture, xPos, yPos, w, h,
+                        new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 0, color.A / 255f));
+                }
             }
             CommandList.PopDebugGroup();
         }
