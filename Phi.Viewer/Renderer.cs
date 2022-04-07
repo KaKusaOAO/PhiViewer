@@ -94,6 +94,10 @@ namespace Phi.Viewer
 
         private IntPtr _memFont = IntPtr.Zero;
 
+        private uint _fontSize = 70;
+
+        private uint _fontTexPad = 5;
+
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
 
         public bool NeedsUpdateRenderTarget { get; set; }
@@ -235,7 +239,7 @@ namespace Phi.Viewer
             }
             else
             {
-                FT_Set_Pixel_Sizes(_fontFace, 0, 96);
+                FT_Set_Pixel_Sizes(_fontFace, 0, _fontSize);
             }
         }
 
@@ -597,7 +601,7 @@ namespace Phi.Viewer
         {
             var x = 0f;
             var y = 0f;
-            var scale = fontSize / 96;
+            var scale = fontSize / _fontSize;
             
             foreach (var c in text)
             {
@@ -606,11 +610,10 @@ namespace Phi.Viewer
 
                 var ch = chn.Value;
                 var yPos = y - ch.Bearing.Y * scale;
-                var w = ch.Size.X * scale;
-                var h = ch.Size.Y * scale;
-                x += c == ' ' ? fontSize * 0.33f : w + fontSize * 0.1f;
+                var w = (ch.Size.X + _fontTexPad) * scale;
+                var h = (ch.Size.Y + _fontTexPad) * scale;
+                x += c == ' ' ? fontSize * 0.33f : w - _fontTexPad * scale + fontSize * 0.1f;
                 y = MathF.Max(y, h);
-                Console.WriteLine($"yPos={yPos}, h={h}, y={y}");
             }
             
             return new SizeF(x, y);
@@ -628,20 +631,20 @@ namespace Phi.Viewer
                 var h = Math.Max(1, face.GlyphBitmap.rows);
                 
                 var texture = factory.CreateTexture(new TextureDescription(
-                    w + 2, h + 2, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
+                    w + _fontTexPad * 2, h + _fontTexPad * 2, 1, 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                     TextureUsage.Sampled, TextureType.Texture2D));
                 texture.Name = $"Saira-char: {c}";
                 factory.DisposeCollector.Remove(texture);
                 
-                var size = w * h * 4;
+                var size = (w + _fontTexPad) * (h + _fontTexPad) * 4;
                 var buffer = new byte[size];
 
-                for (var ty = 1; ty < face.GlyphBitmap.rows; ty++)
+                for (var ty = 0; ty < face.GlyphBitmap.rows; ty++)
                 {
-                    for (var tx = 1; tx < face.GlyphBitmap.width; tx++)
+                    for (var tx = 0; tx < face.GlyphBitmap.width; tx++)
                     {
-                        var px = Marshal.ReadByte(face.GlyphBitmap.buffer, (int) ((ty - 1) * face.GlyphBitmap.width +
-                            (tx - 1)));
+                        var px = Marshal.ReadByte(face.GlyphBitmap.buffer, (int) (ty * face.GlyphBitmap.width +
+                            tx));
                         var idx = ty * w * 4 + tx * 4;
                         buffer[idx+0] = 255;
                         buffer[idx+1] = 255;
@@ -650,7 +653,7 @@ namespace Phi.Viewer
                     }
                 }
 
-                GraphicsDevice.UpdateTexture(texture, buffer, 1, 1, 0, w,
+                GraphicsDevice.UpdateTexture(texture, buffer, _fontTexPad, _fontTexPad, 0, w,
                     h, 1, 0, 0);
 
                 _characters.Add(c, new DrawableCharacter
@@ -669,7 +672,7 @@ namespace Phi.Viewer
         {
             if (_ft == null) return;
             
-            var scale = fontSize / 96;
+            var scale = fontSize / _fontSize;
             
             CommandList.PushDebugGroup("DrawText");
             foreach (var c in text)
@@ -678,11 +681,11 @@ namespace Phi.Viewer
                 if (chn == null) continue;
 
                 var ch = chn.Value;
-                var xPos = x + ch.Bearing.X * scale;
-                var yPos = y - ch.Bearing.Y * scale;
-                var w = ch.Size.X * scale;
-                var h = ch.Size.Y * scale;
-                x += c == ' ' ? fontSize * 0.33f : w + fontSize * 0.1f;
+                var xPos = x + (ch.Bearing.X - _fontTexPad) * scale;
+                var yPos = y - (ch.Bearing.Y + _fontTexPad) * scale;
+                var w = (ch.Size.X + _fontTexPad) * scale;
+                var h = (ch.Size.Y + _fontTexPad) * scale;
+                x += c == ' ' ? fontSize * 0.33f : w - _fontTexPad * scale + fontSize * 0.1f;
 
                 if (c != ' ')
                 {

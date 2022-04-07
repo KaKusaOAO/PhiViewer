@@ -216,7 +216,7 @@ namespace Phi.Viewer
         private void RenderUI()
         {
             var pad = RenderXPad;
-            var ratio = Ratio;
+            var ratio = Ratio * 1.25f;
             var cw = WindowSize.Width - pad * 2;
             var ch = WindowSize.Height;
 
@@ -227,6 +227,11 @@ namespace Phi.Viewer
             var sScale = size.Width > 545 * ratio ? 545 * ratio / size.Width : 1;
             var textYOff = size.Height / 2 * sScale;
             Renderer.DrawText(title, Color.White, 28 * ratio * sScale, pad + 50 * ratio, ch - 45 * ratio + textYOff);
+
+            var diff = "SP Lv.?";
+            size = Renderer.MeasureText(diff, 28 * ratio);
+            textYOff = size.Height / 2 * sScale;
+            Renderer.DrawText(diff, Color.White, 28 * ratio, cw + pad - 40 * ratio - size.Width, ch - 45 * ratio + textYOff);
         }
     }
 }
