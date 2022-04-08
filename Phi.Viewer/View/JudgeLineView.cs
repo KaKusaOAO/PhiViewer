@@ -206,8 +206,12 @@ namespace Phi.Viewer.View
                     renderer.PushClip();
                     renderer.ClipRect(-cw, -ch * 2, cw * 2, ch * 2);
                 }
-                
+
+                var profile = renderer.CurrentProfile;
+                renderer.CurrentProfile = n.IsInspectorHighlightedOnNextDraw ? renderer.BasicAdditive : renderer.BasicNormal;
                 n.Render();
+                renderer.CurrentProfile = profile;
+                n.IsInspectorHighlightedOnNextDraw = false;
 
                 if (doClip)
                 {

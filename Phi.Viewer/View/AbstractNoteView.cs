@@ -20,6 +20,8 @@ namespace Phi.Viewer.View
         public bool IsCrossed { get; private set; }
         
         public NoteSide Side { get; private set; }
+        
+        public bool IsInspectorHighlightedOnNextDraw { get; set; }
 
         public virtual bool DoesClipOnPositiveSpeed => false; 
 

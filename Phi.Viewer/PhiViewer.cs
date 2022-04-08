@@ -5,6 +5,7 @@ using System.IO;
 using System.Numerics;
 using Phi.Charting;
 using Phi.Resources;
+using Phi.Viewer.Graphics;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
@@ -138,6 +139,9 @@ namespace Phi.Viewer
         public void Render()
         {
             Renderer.Begin();
+            Renderer.SetCurrentPipelineProfile(Renderer.BasicNormal);
+            Renderer.ClearBuffers();
+            Renderer.SetFullViewport();
 
             Renderer.Transform = Matrix4x4.Identity;
             Renderer.Translate((WindowSize.Width - WindowSize.Width * CanvasScale) / 2, (WindowSize.Height - WindowSize.Height * CanvasScale) / 2);

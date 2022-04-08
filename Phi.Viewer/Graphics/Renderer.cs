@@ -1,14 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using FreeTypeSharp;
 using FreeTypeSharp.Native;
 using Phi.Resources;
-using Phi.Viewer.View;
 using Veldrid;
 using Veldrid.SPIRV;
 using Veldrid.Utilities;
@@ -17,7 +15,7 @@ using ResourceSet = Veldrid.ResourceSet;
 
 using static FreeTypeSharp.Native.FT;
 
-namespace Phi.Viewer
+namespace Phi.Viewer.Graphics
 {
     public class Renderer
     {
@@ -25,15 +23,13 @@ namespace Phi.Viewer
         {
             public Texture Texture;
             public Texture Depth;
-            public Framebuffer Framebuffer;
-            public Pipeline Pipeline;
+            public PipelineProfile Profile;
 
             public void Dispose()
             {
                 Texture?.Dispose();
                 Depth?.Dispose();
-                Framebuffer?.Dispose();
-                Pipeline?.Dispose();
+                Profile?.DisposeResources();
             }
         }
         
@@ -55,10 +51,6 @@ namespace Phi.Viewer
 
         private Matrix4x4 _transform;
 
-        private GraphicsPipelineDescription _pipelineDescription;
-        private GraphicsPipelineDescription _clipPD;
-        private GraphicsPipelineDescription _mainPD;
-        private Pipeline _pipeline;
         
         private DeviceBuffer _quadIndexBuffer;
         
@@ -76,8 +68,10 @@ namespace Phi.Viewer
         private Texture _renderColor;
         private Texture _renderColorResolved;
         private Texture _renderDepth;
+        
         private Framebuffer _renderTarget;
-        private Pipeline _mainPipeline;
+        private Pipeline _pipeline;
+        private GraphicsPipelineDescription _pipelineDescription;
 
         internal Texture RenderTargetTexture => _renderColor;
         
@@ -98,9 +92,20 @@ namespace Phi.Viewer
 
         public bool NeedsUpdateRenderTarget { get; set; }
 
-        private Framebuffer _currentFramebuffer;
-        private Pipeline _currentPipeline;
+        private PipelineProfile _currentProfile;
+
+        public PipelineProfile CurrentProfile
+        {
+            get => _currentProfile;
+            set => SetCurrentPipelineProfile(value);
+        }
         
+        public PipelineProfile BasicNormal { get; private set; }
+        public PipelineProfile BasicAdditive { get; private set; }
+        
+        private GraphicsPipelineDescription _clipPD;
+        private PipelineProfile _mainSwapchainProfile;
+
         public Renderer(PhiViewer viewer)
         {
             Viewer = viewer;
@@ -163,43 +168,33 @@ namespace Phi.Viewer
             {
                 Elements = Array.Empty<ResourceLayoutElementDescription>()
             });
-
-            // Create pipeline
-            _pipelineDescription = new GraphicsPipelineDescription();
-            _pipelineDescription.BlendState = BlendStateDescription.SingleAlphaBlend;
-            _pipelineDescription.BlendState.AttachmentStates[0].SourceAlphaFactor = BlendFactor.One;
-            _pipelineDescription.BlendState.AttachmentStates[0].DestinationAlphaFactor = BlendFactor.One;
-            _pipelineDescription.DepthStencilState = new DepthStencilStateDescription(false, false, ComparisonKind.Always,
-                false, 
-                new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
-                new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
-                0, 0, 0);
-            _pipelineDescription.RasterizerState = new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, 
-                FrontFace.Clockwise, false, false);
-            _pipelineDescription.PrimitiveTopology = PrimitiveTopology.TriangleList;
-            _pipelineDescription.ResourceLayouts = new [] { _vertLayout, _fragLayout };
-            _pipelineDescription.ShaderSet = new ShaderSetDescription(
-                vertexLayouts: new[] { vertexLayout },
-                shaders: _shaders);
+            
             
             // Main swapchain
-            _mainPD = new GraphicsPipelineDescription();
-            _mainPD.BlendState = BlendStateDescription.SingleAlphaBlend;
-            _mainPD.DepthStencilState = new DepthStencilStateDescription(false, false, ComparisonKind.Always,
+            var mainPd = new GraphicsPipelineDescription();
+            mainPd.BlendState = BlendStateDescription.SingleAlphaBlend;
+            mainPd.DepthStencilState = new DepthStencilStateDescription(false, false, ComparisonKind.Always,
                 false, 
                 new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
                 new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
                 0, 0, 0);
-            _mainPD.RasterizerState = new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, FrontFace.Clockwise, false, false);
-            _mainPD.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
-            _mainPD.ResourceLayouts = new [] { _vertLayout, _fragLayout };
-            _mainPD.ShaderSet = new ShaderSetDescription(
+            mainPd.RasterizerState = new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, FrontFace.Clockwise, false, false);
+            mainPd.PrimitiveTopology = PrimitiveTopology.TriangleStrip;
+            mainPd.ResourceLayouts = new [] { _vertLayout, _fragLayout };
+            mainPd.ShaderSet = new ShaderSetDescription(
                 vertexLayouts: new[] { vertexLayout },
                 shaders: _shaders);
 
-            _mainPD.Outputs = GraphicsDevice.SwapchainFramebuffer.OutputDescription;
-            _mainPipeline = Factory.CreateGraphicsPipeline(_mainPD);
-            _mainPipeline.Name = "Main Swapchain Pipeline";
+            mainPd.Outputs = GraphicsDevice.SwapchainFramebuffer.OutputDescription;
+            var mainPipeline = Factory.CreateGraphicsPipeline(mainPd);
+            mainPipeline.Name = "Main Swapchain Pipeline";
+
+            _mainSwapchainProfile = new PipelineProfile
+            {
+                Framebuffer = GraphicsDevice.SwapchainFramebuffer,
+                Pipeline = mainPipeline,
+                PipelineDescription = mainPd
+            };
 
             // Clip
             _clipPD = new GraphicsPipelineDescription();
@@ -242,6 +237,41 @@ namespace Phi.Viewer
             }
         }
 
+        private GraphicsPipelineDescription CreateBasicDescription()
+        {
+            return new GraphicsPipelineDescription
+            {
+                BlendState = new BlendStateDescription
+                {
+                    AttachmentStates = new[]
+                    {
+                        new BlendAttachmentDescription
+                        {
+                            BlendEnabled = true,
+                            SourceColorFactor = BlendFactor.SourceAlpha,
+                            DestinationColorFactor = BlendFactor.InverseSourceAlpha,
+                            ColorFunction = BlendFunction.Add,
+                            AlphaFunction = BlendFunction.Add,
+                            SourceAlphaFactor = BlendFactor.One,
+                            DestinationAlphaFactor = BlendFactor.One
+                        }
+                    }
+                },
+                DepthStencilState = new DepthStencilStateDescription(false, false, ComparisonKind.Always,
+                    false, 
+                    new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
+                    new StencilBehaviorDescription(StencilOperation.Keep, StencilOperation.Keep, StencilOperation.Keep, ComparisonKind.Always),
+                    0, 0, 0),
+                RasterizerState = new RasterizerStateDescription(FaceCullMode.None, PolygonFillMode.Solid, 
+                    FrontFace.Clockwise, false, false),
+                PrimitiveTopology = PrimitiveTopology.TriangleList,
+                ResourceLayouts = new [] { _vertLayout, _fragLayout },
+                ShaderSet = new ShaderSetDescription(
+                    vertexLayouts: new[] { _vertexLayoutDesc },
+                    shaders: _shaders)
+            };
+        }
+
         private void UpdateRenderTarget()
         {
             var factory = Factory;
@@ -253,6 +283,7 @@ namespace Phi.Viewer
 
             NeedsUpdateRenderTarget = false;
 
+            // Textures
             var renderColorDesc = TextureDescription.Texture2D(
                 (uint)(window.Width * resolutionScale),
                 (uint)(window.Height * resolutionScale),
@@ -295,16 +326,52 @@ namespace Phi.Viewer
             _renderDepth.Name = "Render Target Depth";
             factory.DisposeCollector.Remove(_renderDepth);
             
-            _renderTarget?.Dispose();
-            _renderTarget = factory.CreateFramebuffer(new FramebufferDescription(_renderDepth, _renderColor));
-            _renderTarget.Name = "Render Target Framebuffer";
-            factory.DisposeCollector.Remove(_renderTarget);
+            // Pipeline: Normal
+            BasicNormal ??= new PipelineProfile
+            {
+                PipelineDescription = CreateBasicDescription()
+            };
             
-            _pipeline?.Dispose();
-            _pipelineDescription.Outputs = _renderTarget.OutputDescription;
-            _pipeline = factory.CreateGraphicsPipeline(_pipelineDescription);
-            _pipeline.Name = "Render Target Pipeline";
-            factory.DisposeCollector.Remove(_pipeline);
+            BasicNormal.DisposeResources();
+
+            var renderTarget = factory.CreateFramebuffer(new FramebufferDescription(_renderDepth, _renderColor));
+            renderTarget.Name = "Render Target Framebuffer";
+            factory.DisposeCollector.Remove(renderTarget);
+            
+            var renderPd = BasicNormal.PipelineDescription;
+            renderPd.Outputs = renderTarget.OutputDescription;
+            BasicNormal.PipelineDescription = renderPd;
+            
+            var pipeline = factory.CreateGraphicsPipeline(renderPd);
+            pipeline.Name = "Render Target Pipeline";
+            factory.DisposeCollector.Remove(pipeline);
+
+            BasicNormal.Framebuffer = renderTarget;
+            BasicNormal.Pipeline = pipeline;
+
+            // Pipeline: Additive
+            if (BasicAdditive == null)
+            {
+                renderPd = CreateBasicDescription();
+                renderPd.BlendState.AttachmentStates[0].SourceColorFactor = BlendFactor.One;
+                renderPd.BlendState.AttachmentStates[0].DestinationColorFactor = BlendFactor.One;
+                BasicAdditive = new PipelineProfile
+                {
+                    PipelineDescription = renderPd
+                };
+            }
+            else
+            {
+                renderPd = BasicAdditive.PipelineDescription;
+            }
+            BasicAdditive.Pipeline?.Dispose();   // Don't call DisposeResources() here from now on
+            BasicAdditive.Framebuffer = BasicNormal.Framebuffer;
+            renderPd.Outputs = renderTarget.OutputDescription;
+            
+            pipeline = factory.CreateGraphicsPipeline(renderPd);
+            pipeline.Name = "Render Target Pipeline (Additive)";
+            factory.DisposeCollector.Remove(pipeline);
+            BasicAdditive.Pipeline = pipeline;
 
             for (var i = 0; i < _clipStack.Count; i++)
             {
@@ -352,8 +419,12 @@ namespace Phi.Viewer
 
             return new ClipStateEntry
             {
-                Framebuffer = clipFramebuffer,
-                Pipeline = clipPipeline,
+                Profile = new PipelineProfile
+                {
+                    Framebuffer = clipFramebuffer,
+                    Pipeline = clipPipeline,
+                    PipelineDescription = _clipPD
+                },
                 Texture = clipColor,
                 Depth = clipDepth
             };
@@ -370,27 +441,29 @@ namespace Phi.Viewer
             }
             
             CommandList.Begin();
-            SetFramebufferPipelinePair(_renderTarget, _pipeline);
-            ClearBuffers();
+        }
+
+        public void SetFullViewport()
+        {
+            var window = Viewer.Host.Window;
             CommandList.SetViewport(0, new Viewport(0, 0, window.Width, window.Height, 0, 1));
         }
 
-        private void SetFramebufferPipelinePair(Framebuffer framebuffer, Pipeline pipeline)
+        public void SetCurrentPipelineProfile(PipelineProfile profile)
         {
-            CommandList.SetFramebuffer(framebuffer);
-            CommandList.SetPipeline(pipeline);
-            _currentFramebuffer = framebuffer;
-            _currentPipeline = pipeline;
+            CommandList.SetFramebuffer(profile.Framebuffer);
+            CommandList.SetPipeline(profile.Pipeline);
+            _currentProfile = profile;
         }
 
-        private void ClearBuffers()
+        public void ClearBuffers()
         {
             ClearClip();
-            
             CommandList.SetFramebuffer(GraphicsDevice.SwapchainFramebuffer);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
-            SetFramebufferPipelinePair(_renderTarget, _pipeline);
+            CommandList.SetFramebuffer(BasicNormal.Framebuffer);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
+            if (_currentProfile != null) SetCurrentPipelineProfile(_currentProfile);
         }
         
         /// <summary>
@@ -459,8 +532,7 @@ namespace Phi.Viewer
                 CommandList.CopyTexture(_renderColor, _renderColorResolved);
             }
 
-            CommandList.SetFramebuffer(GraphicsDevice.SwapchainFramebuffer);
-            CommandList.SetPipeline(_mainPipeline);
+            SetCurrentPipelineProfile(_mainSwapchainProfile);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
             DrawTexture(_renderColorResolved, 0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
             CommandList.PopDebugGroup();
@@ -597,8 +669,8 @@ namespace Phi.Viewer
             _isClipping = true;
             
             var entry = _clipStack[_clipLevel];
-            CommandList.SetFramebuffer(entry.Framebuffer);
-            CommandList.SetPipeline(entry.Pipeline);
+            CommandList.SetFramebuffer(entry.Profile.Framebuffer);
+            CommandList.SetPipeline(entry.Profile.Pipeline);
 
             var p = Viewer.WindowSize.Width + Viewer.WindowSize.Height;
             p += width + height;
@@ -620,17 +692,16 @@ namespace Phi.Viewer
 
             Transform = t;
             _isClipping = false;
-            CommandList.SetFramebuffer(_renderTarget);
-            CommandList.SetPipeline(_pipeline);
+            SetCurrentPipelineProfile(_currentProfile);
             CommandList.PopDebugGroup();
         }
         
         public void ClearClip()
         {
             var entry = _clipStack[_clipLevel];
-            CommandList.SetFramebuffer(entry.Framebuffer);
+            CommandList.SetFramebuffer(entry.Profile.Framebuffer);
             CommandList.ClearColorTarget(0, RgbaFloat.White);
-            CommandList.SetFramebuffer(_renderTarget);
+            if (_currentProfile != null) SetCurrentPipelineProfile(_currentProfile);
         }
 
         public SizeF MeasureText(string text, float fontSize)

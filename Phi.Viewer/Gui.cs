@@ -175,6 +175,7 @@ namespace Phi.Viewer
                     {
                         if (_inspectingObject is AbstractNoteView note)
                         {
+                            note.IsInspectorHighlightedOnNextDraw = true;
                             ImGui.Text($"{note.Model.Type}Note");
                             
                             if (ImGui.BeginCombo("Note Type", $"{note.Model.Type}Note"))
