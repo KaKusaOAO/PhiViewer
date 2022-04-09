@@ -39,6 +39,7 @@ namespace Phi.Viewer
             var window = viewer.Host.Window;
             renderer.WindowResized((int) window.Width, (int) window.Height);
             renderer.Update((float) delta, snapshot);
+            ImGui.GetWindowViewport().DpiScale = 2;
         }
 
         private object _inspectingObject = null;
@@ -384,7 +385,7 @@ namespace Phi.Viewer
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn();
                         ImGui.TableNextColumn();
-                        ImGui.PushItemWidth(ImGui.GetWindowWidth() - ImGui.GetCursorPosX() - 5);
+                        ImGui.PushItemWidth(ImGui.GetWindowWidth() - ImGui.GetCursorPosX() - 20);
                         ImGui.PushID("timeline_scale_id");
                         ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ImGui.GetScrollX());
                         ImGui.SliderFloat("", ref _timelineScale, 4, 100, "");

@@ -50,9 +50,6 @@ namespace Phi.Viewer.Graphics
         public CommandList CommandList { get; private set; }
 
         private Matrix4x4 _transform;
-
-        
-        private DeviceBuffer _quadIndexBuffer;
         
         private Shader[] _shaders;
         private Shader[] _shadersClip;
@@ -88,6 +85,7 @@ namespace Phi.Viewer.Graphics
 
         private uint _fontSize = 70;
         private uint _fontTexPad = 5;
+        private uint _fontRes = 300;
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
 
         public bool NeedsUpdateRenderTarget { get; set; }
@@ -121,16 +119,8 @@ namespace Phi.Viewer.Graphics
         {
             Factory = new DisposeCollectorResourceFactory(GraphicsDevice.ResourceFactory);
 
-            ushort[] quadIndices = { 0, 1, 2, 2, 1, 3 };
-            var ibDescription = new BufferDescription(
-                6 * sizeof(ushort),
-                BufferUsage.IndexBuffer);
-            _quadIndexBuffer = Factory.CreateBuffer(ibDescription);
-            _quadIndexBuffer.Name = "Quad Index Buffer";
-            GraphicsDevice.UpdateBuffer(_quadIndexBuffer, 0, quadIndices);
-
             var vertexLayout = new VertexLayoutDescription(
-                new VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2),
+                new VertexElementDescription("Position", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float3),
                 new VertexElementDescription("TextureCoordinates", VertexElementSemantic.TextureCoordinate, VertexElementFormat.Float2));
             _vertexLayoutDesc = vertexLayout;
 
@@ -233,7 +223,7 @@ namespace Phi.Viewer.Graphics
             }
             else
             {
-                FT_Set_Pixel_Sizes(_fontFace, 0, _fontSize);
+                FT_Set_Char_Size(_fontFace, IntPtr.Zero, new IntPtr(_fontSize * 64), _fontRes, _fontRes);
             }
         }
 
@@ -353,8 +343,8 @@ namespace Phi.Viewer.Graphics
             if (BasicAdditive == null)
             {
                 renderPd = CreateBasicDescription();
-                renderPd.BlendState.AttachmentStates[0].SourceColorFactor = BlendFactor.One;
-                renderPd.BlendState.AttachmentStates[0].DestinationColorFactor = BlendFactor.One;
+                renderPd.BlendState.AttachmentStates[0].SourceColorFactor = BlendFactor.SourceAlpha;
+                renderPd.BlendState.AttachmentStates[0].DestinationColorFactor = BlendFactor.DestinationAlpha;
                 BasicAdditive = new PipelineProfile
                 {
                     PipelineDescription = renderPd
@@ -475,24 +465,60 @@ namespace Phi.Viewer.Graphics
         /// <param name="height">The height of the quad.</param>
         public void DrawQuad(float x, float y, float width, float height)
         {
-            CommandList.PushDebugGroup("DrawQuad");
-            Vector4[] quadVerts =
+            Vector3[] quadMesh =
             {
-                new Vector4(x, y, 0, 0),
-                new Vector4(x + width, y, 1, 0),
-                new Vector4(x, y + height, 0, 1),
-                new Vector4(x + width, y + height, 1, 1),
+                new Vector3(x, y, 0),
+                new Vector3(x + width, y, 0),
+                new Vector3(x, y + height, 0),
+                new Vector3(x + width, y + height, 0)
             };
-            var vbDescription = new BufferDescription(64, BufferUsage.VertexBuffer);
             
-            var factory = Factory;
-            var vertexBuffer = factory.CreateBuffer(vbDescription);
+            Vector2[] quadUv =
+            {
+                new Vector2(0, 0),
+                new Vector2(1, 0),
+                new Vector2(0, 1),
+                new Vector2(1, 1)
+            };
+            
+            ushort[] quadIndices = { 0, 1, 2, 2, 1, 3 };
+            
+            DrawMesh(quadMesh, quadUv, quadIndices);
+        }
+
+        public void DrawMesh(Vector3[] mesh, Vector2[] uv, ushort[] indices)
+        {
+            CommandList.PushDebugGroup("DrawMesh");
+            if (mesh.Length != uv.Length)
+            {
+                throw new ArgumentException("UV length doesn't match the mesh length");
+            }
+
+            var vertices = new VertexInfo[mesh.Length];
+            for (var i = 0; i < mesh.Length; i++)
+            {
+                vertices[i] = new VertexInfo
+                {
+                    Position = mesh[i],
+                    Uv = uv[i]
+                };
+            }
+            
+            var vbDescription = new BufferDescription((uint)(20 * mesh.Length), BufferUsage.VertexBuffer);
+            var vertexBuffer = Factory.CreateBuffer(vbDescription);
             vertexBuffer.Name = "Quad Vertex Buffer";
-            GraphicsDevice.UpdateBuffer(vertexBuffer, 0, quadVerts);
+            GraphicsDevice.UpdateBuffer(vertexBuffer, 0, vertices);
             CommandList.SetVertexBuffer(0, vertexBuffer);
             
-            var matrixInfoBuffer = factory.CreateBuffer(new BufferDescription(MatrixInfo.SizeInBytes, BufferUsage.UniformBuffer));
-            matrixInfoBuffer.Name = "Quad Vertex Buffer - Matrix Info";
+            var ibDescription = new BufferDescription(
+                (uint)indices.Length * sizeof(ushort),
+                BufferUsage.IndexBuffer);
+            var indexBuffer = Factory.CreateBuffer(ibDescription);
+            indexBuffer.Name = "Index Buffer";
+            GraphicsDevice.UpdateBuffer(indexBuffer, 0, indices);
+            
+            var matrixInfoBuffer = Factory.CreateBuffer(new BufferDescription(MatrixInfo.SizeInBytes, BufferUsage.UniformBuffer));
+            matrixInfoBuffer.Name = "Vertex Layout - Matrix Info";
             GraphicsDevice.UpdateBuffer(
                 matrixInfoBuffer, 0, new MatrixInfo
                 {
@@ -500,13 +526,12 @@ namespace Phi.Viewer.Graphics
                     Resolution = new Vector2(Viewer.WindowSize.Width, Viewer.WindowSize.Height)
                 });
             
-            var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
-                _vertLayout, matrixInfoBuffer));
-            resourceSet.Name = "Quad Vertex Layout Resource Set";
+            var resourceSet = Factory.CreateResourceSet(new ResourceSetDescription(_vertLayout, matrixInfoBuffer));
+            resourceSet.Name = "Vertex Layout Resource Set";
             
             CommandList.SetGraphicsResourceSet(0, resourceSet);
-            CommandList.SetIndexBuffer(_quadIndexBuffer, IndexFormat.UInt16);
-            CommandList.DrawIndexed(6);
+            CommandList.SetIndexBuffer(indexBuffer, IndexFormat.UInt16);
+            CommandList.DrawIndexed((uint)indices.Length);
             CommandList.PopDebugGroup();
         }
 
@@ -708,25 +733,36 @@ namespace Phi.Viewer.Graphics
         {
             var x = 0f;
             var y = 0f;
-            var scale = fontSize / _fontSize;
-            
+            var scale = fontSize / _fontSize * 72 / _fontRes;
+
+            char? lastChar = null;
             foreach (var c in text)
             {
                 var chn = GetDrawableCharacter(c);
                 if (chn == null) continue;
 
                 var ch = chn.Value;
-                var yPos = y - ch.Bearing.Y * scale;
-                var w = (ch.Size.X + _fontTexPad) * scale;
                 var h = (ch.Size.Y + _fontTexPad) * scale;
-                x += c == ' ' ? fontSize * 0.33f : w - _fontTexPad * scale + fontSize * 0.1f;
+                AdvanceX(lastChar, c, ref x, scale);
+                lastChar = c;
                 y = MathF.Max(y, h);
             }
             
             return new SizeF(x, y);
         }
 
-        private DrawableCharacter? GetDrawableCharacter(char c)
+        private bool AdvanceX(char? lastChar, char c, ref float x, float scale)
+        {
+            var chn = GetDrawableCharacter(c);
+            if (chn == null) return false;
+
+            var ch = chn.Value;
+            x += c == ' ' ? 87 * scale : -_fontTexPad * scale + ch.Advance * scale;
+            if (lastChar.HasValue) x += GetKerning(lastChar.Value, c).X * scale;
+            return true;
+        }
+        
+        private unsafe DrawableCharacter? GetDrawableCharacter(char c)
         {
             var factory = Factory;
             if (!_characters.ContainsKey(c))
@@ -768,18 +804,26 @@ namespace Phi.Viewer.Graphics
                     Texture = texture,
                     Size = new Vector2(w, h),
                     Bearing = new Vector2(face.GlyphBitmapLeft, face.GlyphBitmapTop),
-                    Advance = face.Ascender / 64f * 5
+                    Advance = face.FaceRec->glyph->advance.x.ToInt32() / 64f
                 });
             }
 
             return _characters[c];
+        }
+
+        private Vector2 GetKerning(char left, char right)
+        {
+            FT_Get_Kerning(_fontFace, left, right, 0, out var vec);
+            return new Vector2(vec.x.ToInt64() / 64f, vec.y.ToInt64() / 64f);
         }
         
         public void DrawText(string text, Color color, float fontSize, float x, float y)
         {
             if (_ft == null) return;
             
-            var scale = fontSize / _fontSize;
+            var scale = fontSize / _fontSize * 72 / _fontRes;
+
+            char? lastChar = null;
             
             CommandList.PushDebugGroup("DrawText");
             foreach (var c in text)
@@ -792,7 +836,8 @@ namespace Phi.Viewer.Graphics
                 var yPos = y - (ch.Bearing.Y + _fontTexPad) * scale;
                 var w = (ch.Size.X + _fontTexPad) * scale;
                 var h = (ch.Size.Y + _fontTexPad) * scale;
-                x += c == ' ' ? fontSize * 0.33f : w - _fontTexPad * scale + fontSize * 0.1f;
+                AdvanceX(lastChar, c, ref x, scale);
+                lastChar = c;
 
                 if (c != ' ')
                 {
@@ -829,5 +874,11 @@ namespace Phi.Viewer.Graphics
             Transform = transform;
             Resolution = resolution;
         }
+    }
+
+    public struct VertexInfo
+    {
+        public Vector3 Position;
+        public Vector2 Uv;
     }
 }

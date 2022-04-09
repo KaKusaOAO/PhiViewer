@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Phi.Viewer;
 using Veldrid;
 using Veldrid.Sdl2;
@@ -9,6 +10,12 @@ namespace Phi.Desktop
     {
         private Sdl2Window handle;
         
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private unsafe delegate void GetDrawableSizeDelegate(SDL_Window window, int* x, int* y);
+
+        private static GetDrawableSizeDelegate s_GL_GetDrawableSize =>
+            Sdl2Native.LoadFunction<GetDrawableSizeDelegate>("SDL_GL_GetDrawableSize");
+
         public GraphicsDevice GraphicsDevice { get; }
 
         public bool Exists => handle.Exists;
@@ -21,6 +28,7 @@ namespace Phi.Desktop
         {
             int x, y;
             Sdl2Native.SDL_GetWindowSize(handle.SdlWindowHandle, &x, &y);
+            // s_GL_GetDrawableSize(handle.SdlWindowHandle, &x, &y);
             return x;
         }
     
@@ -28,6 +36,7 @@ namespace Phi.Desktop
         {
             int x, y;
             Sdl2Native.SDL_GetWindowSize(handle.SdlWindowHandle, &x, &y);
+            // s_GL_GetDrawableSize(handle.SdlWindowHandle, &x, &y);
             return y;
         }
         

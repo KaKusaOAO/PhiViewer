@@ -67,6 +67,8 @@ namespace Phi.Viewer
 
         public float Duration { get; set; } = 133000;
 
+        public float PlaybackRate { get; set; } = 1;
+
         public float NoteRatio
         {
             get
