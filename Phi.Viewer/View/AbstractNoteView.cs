@@ -1,12 +1,27 @@
 ﻿using System;
+using System.IO;
 using System.Numerics;
 using Phi.Charting.Notes;
+using Phi.Resources;
+using Phi.Viewer.Audio;
 using Veldrid;
 
 namespace Phi.Viewer.View
 {
     public abstract class AbstractNoteView
     {
+        protected static Stream TapFXAudioStream { get; private set; }
+        protected static Stream FlickFXAudioStream { get; private set; }
+        protected static Stream CatchFXAudioStream { get; private set; }
+
+        static AbstractNoteView()
+        {
+            var asm = typeof(ResourceHelper).Assembly;
+            TapFXAudioStream = asm.GetManifestResourceStream("Phi.Resources.Audio.TapFX.wav");
+            FlickFXAudioStream = asm.GetManifestResourceStream("Phi.Resources.Audio.FlickFX.wav");
+            CatchFXAudioStream = asm.GetManifestResourceStream("Phi.Resources.Audio.CatchFX.wav");
+        }
+        
         public const float NoteWidth = 240;
         
         public JudgeLineView Parent { get; protected set; }
@@ -40,8 +55,16 @@ namespace Phi.Viewer.View
             if (crossed && !IsCrossed)
             {
                 IsCrossed = true;
-                
-                // TODO: Play sound
+
+                if (gt - Model.Time < 10 && viewer.IsPlaying)
+                {
+                    if (viewer.EnableClickSound)
+                    {
+                        viewer.AddAnimatedObject(new OneShotAudio(GetClearAudioStream()));
+                    }
+                    
+                    SpawnJudge();
+                }
             }
         }
 
@@ -100,7 +123,19 @@ namespace Phi.Viewer.View
 
         public void SpawnJudge()
         {
-            
+            var viewer = PhiViewer.Instance;
+            if (!viewer.EnableParticles) return;
+
+            var linePos = Parent.GetScaledPos(Parent.GetLinePos(viewer.Time));
+            var rad = -Parent.GetLineRotation(viewer.Time) / 180 * MathF.PI;
+            var xPos = GetXPos();
+
+            var px = MathF.Cos(rad) * xPos + linePos.X;
+            var py = MathF.Sin(rad) * xPos + linePos.Y;
+            var j = new JudgeEffect(px, py, 10);
+            viewer.AddAnimatedObject(j);
         }
+
+        public virtual Stream GetClearAudioStream() => TapFXAudioStream;
     }
 }

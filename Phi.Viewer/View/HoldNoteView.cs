@@ -51,6 +51,15 @@ namespace Phi.Viewer.View
 
         public override bool DoesClipOnPositiveSpeed => true;
 
+        public override float ClearTime => InternalGetClearTime();
+
+        private float InternalGetClearTime()
+        {
+            var ct = (Model.Time + Model.HoldTime) / (Parent.Model.Bpm / 1875);
+            ct -= 250;
+            return MathF.Max(Model.Time, Parent.GetConvertedGameTime(ct));
+        }
+
         public override void Render()
         {
             var viewer = PhiViewer.Instance;

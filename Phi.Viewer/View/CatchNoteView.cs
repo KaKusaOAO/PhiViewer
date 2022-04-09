@@ -1,4 +1,5 @@
-﻿using Phi.Charting.Notes;
+﻿using System.IO;
+using Phi.Charting.Notes;
 using Phi.Resources;
 using Phi.Viewer.Utils;
 using Veldrid;
@@ -47,5 +48,7 @@ namespace Phi.Viewer.View
                 renderer.DrawTexture(RenderTexture, -w / 2 + xPos, -h / 2 - yPos, w, h);
             }
         }
+
+        public override Stream GetClearAudioStream() => CatchFXAudioStream;
     }
 }

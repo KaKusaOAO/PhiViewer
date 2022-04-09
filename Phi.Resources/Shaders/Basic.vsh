@@ -5,6 +5,7 @@ layout(location = 1) in vec2 TextureCoordinates;
 
 layout(location = 0) out vec2 fsin_uv;
 layout(location = 1) out vec2 fsin_pos;
+layout(location = 2) out vec2 fsin_res;
 
 layout(set = 0, binding = 2) uniform Transform {
     mat4 Matrix;
@@ -24,4 +25,5 @@ void main()
     fsin_uv = TextureCoordinates;
     fsin_pos = pos.xy;
     fsin_pos = (fsin_pos + vec2(1, 1)) / 2;
+    fsin_res = Resolution;
 }

@@ -13,8 +13,14 @@ layout(set = 1, binding = 2) uniform Tint
 layout(set = 1, binding = 3) uniform texture2D ClipMap;
 layout(set = 1, binding = 4) uniform sampler ClipMapSampler;
 
+layout(set = 1, binding = 5) uniform Filters
+{
+    float BlurRadius;
+};
+
 layout(location = 0) in vec2 fsin_uv;
 layout(location = 1) in vec2 fsin_pos;
+layout(location = 2) in vec2 fsin_res;
 
 layout(location = 0) out vec4 fsout_color;
 
@@ -36,6 +42,8 @@ void main()
     tintedColor.w *= FinalAlpha;
     
     // tintedColor = clipColor;
+    
+    
     
     fsout_color = tintedColor;
 }

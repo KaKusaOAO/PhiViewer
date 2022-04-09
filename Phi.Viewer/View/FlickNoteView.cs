@@ -1,3 +1,4 @@
+using System.IO;
 using Phi.Charting.Notes;
 using Phi.Resources;
 using Phi.Viewer.Utils;
@@ -46,5 +47,7 @@ namespace Phi.Viewer.View
                 renderer.DrawTexture(RenderTexture, -w / 2 + xPos, -h / 2 - yPos, w, h);
             }
         }
+
+        public override Stream GetClearAudioStream() => FlickFXAudioStream;
     }
 }

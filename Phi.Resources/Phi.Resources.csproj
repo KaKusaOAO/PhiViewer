@@ -37,9 +37,16 @@
       <EmbeddedResource Include="Shaders\ClipMap.fsh" />
       <None Remove="Fonts\Saira.ttf" />
       <EmbeddedResource Include="Fonts\Saira.ttf" />
+      <None Remove="Audio\CatchFX.wav" />
+      <EmbeddedResource Include="Audio\CatchFX.wav" />
+      <None Remove="Audio\FlickFX.wav" />
+      <EmbeddedResource Include="Audio\FlickFX.wav" />
+      <None Remove="Audio\TapFX.wav" />
+      <EmbeddedResource Include="Audio\TapFX.wav" />
     </ItemGroup>
 
     <ItemGroup>
+      <Folder Include="Audio" />
       <Folder Include="Fonts" />
     </ItemGroup>
 

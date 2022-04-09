@@ -41,6 +41,13 @@ namespace Phi.Viewer.Graphics
             public float Advance;
         }
         
+        public struct MetricsData
+        {
+            public int VerticesCount { get; set; }
+            public int IndicesCount { get; set; }
+            public int MeshCount { get; set; }
+        }
+        
         public PhiViewer Viewer { get; }
         
         public GraphicsDevice GraphicsDevice => Viewer.Host.Window.GraphicsDevice;
@@ -87,6 +94,10 @@ namespace Phi.Viewer.Graphics
         private uint _fontTexPad = 5;
         private uint _fontRes = 300;
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
+        
+        // Metrics
+        private MetricsData _metrics;
+        public MetricsData Metrics => _metrics;
 
         public bool NeedsUpdateRenderTarget { get; set; }
 
@@ -227,7 +238,7 @@ namespace Phi.Viewer.Graphics
             }
         }
 
-        private GraphicsPipelineDescription CreateBasicDescription()
+        public GraphicsPipelineDescription CreateBasicDescription()
         {
             return new GraphicsPipelineDescription
             {
@@ -429,7 +440,8 @@ namespace Phi.Viewer.Graphics
             {
                 GraphicsDevice.MainSwapchain.Resize((uint)window.Width, (uint)window.Height);
             }
-            
+
+            _metrics = new MetricsData();
             CommandList.Begin();
         }
 
@@ -455,7 +467,7 @@ namespace Phi.Viewer.Graphics
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
             if (_currentProfile != null) SetCurrentPipelineProfile(_currentProfile);
         }
-        
+
         /// <summary>
         /// Draws a quad with currently used pipeline, framebuffer and fragment resource set.
         /// </summary>
@@ -463,7 +475,7 @@ namespace Phi.Viewer.Graphics
         /// <param name="y">The Y position (left-top) of the quad.</param>
         /// <param name="width">The width of the quad.</param>
         /// <param name="height">The height of the quad.</param>
-        public void DrawQuad(float x, float y, float width, float height)
+        public void DrawQuad(float x, float y, float width, float height, Vector2[] uv = null)
         {
             Vector3[] quadMesh =
             {
@@ -473,7 +485,7 @@ namespace Phi.Viewer.Graphics
                 new Vector3(x + width, y + height, 0)
             };
             
-            Vector2[] quadUv =
+            var quadUv = uv ?? new[]
             {
                 new Vector2(0, 0),
                 new Vector2(1, 0),
@@ -506,7 +518,7 @@ namespace Phi.Viewer.Graphics
             
             var vbDescription = new BufferDescription((uint)(20 * mesh.Length), BufferUsage.VertexBuffer);
             var vertexBuffer = Factory.CreateBuffer(vbDescription);
-            vertexBuffer.Name = "Quad Vertex Buffer";
+            vertexBuffer.Name = "Vertex Buffer";
             GraphicsDevice.UpdateBuffer(vertexBuffer, 0, vertices);
             CommandList.SetVertexBuffer(0, vertexBuffer);
             
@@ -533,6 +545,10 @@ namespace Phi.Viewer.Graphics
             CommandList.SetIndexBuffer(indexBuffer, IndexFormat.UInt16);
             CommandList.DrawIndexed((uint)indices.Length);
             CommandList.PopDebugGroup();
+
+            _metrics.IndicesCount += indices.Length;
+            _metrics.MeshCount++;
+            _metrics.VerticesCount += vertices.Length;
         }
 
         public void DrawTexture(Texture texture, float x, float y, float width, float height, TintInfo? tintInfo = null)
@@ -585,6 +601,13 @@ namespace Phi.Viewer.Graphics
         public void DrawRect(Color color, float x, float y, float width, float height)
         {
             CommandList.PushDebugGroup("DrawRect");
+            PrepareSolidColorResourceSet(color);
+            DrawQuad(x, y, width, height);
+            CommandList.PopDebugGroup();
+        }
+
+        private void PrepareSolidColorResourceSet(Color color)
+        {
             var factory = Factory;
             var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
             tintInfoBuffer.Name = "Solid Color TintInfo Uniform Buffer";
@@ -613,9 +636,184 @@ namespace Phi.Viewer.Graphics
                 resourceSet.Name = "Clip Map Fragment Resource Set";
                 CommandList.SetGraphicsResourceSet(1, resourceSet);
             }
+        }
+
+        public void StrokeRect(Color color, float x, float y, float width, float height, float thickness)
+        {
+            Vector3[] mesh =
+            {
+                // Outer
+                /* 0 */ new Vector3(x - thickness / 2,         y - thickness / 2, 0),
+                /* 1 */ new Vector3(x + thickness / 2 + width, y - thickness / 2, 0),
+                /* 2 */ new Vector3(x - thickness / 2,         y + thickness / 2 + height, 0),
+                /* 3 */ new Vector3(x + thickness / 2 + width, y + thickness / 2 + height, 0),
+                
+                // Inner
+                /* 4 */ new Vector3(x + thickness / 2,         y + thickness / 2, 0),
+                /* 5 */ new Vector3(x - thickness / 2 + width, y + thickness / 2, 0),
+                /* 6 */ new Vector3(x + thickness / 2,         y - thickness / 2 + height, 0),
+                /* 7 */ new Vector3(x - thickness / 2 + width, y - thickness / 2 + height, 0),
+            };
             
-            DrawQuad(x, y, width, height);
-            CommandList.PopDebugGroup();
+            var uv = new[]
+            {
+                new Vector2(0, 0),
+                new Vector2(1, 0),
+                new Vector2(0, 1),
+                new Vector2(1, 1),
+                
+                new Vector2(0, 0),
+                new Vector2(1, 0),
+                new Vector2(0, 1),
+                new Vector2(1, 1),
+            };
+
+            /*
+             * 0       1
+             *   4   5
+             *
+             *   6   7
+             * 2       3
+             */
+            // 0 1 2 2 1 3
+            var indices = new ushort[]
+            {
+                0, 1, 4, 4, 1, 5, // up
+                0, 4, 2, 2, 4, 6, // left
+                5, 1, 7, 7, 1, 3, // right
+                6, 7, 2, 2, 7, 3 // bottom
+            };
+
+            PrepareSolidColorResourceSet(color);
+            DrawMesh(mesh, uv, indices);
+        }
+
+        public void StrokeArc(Color color, float x, float y, float radius, float startRadians, float endRadians, float thickness, bool counterClockwise = false)
+        {
+            var s = startRadians;
+            var e = endRadians;
+            if (counterClockwise) (s, e) = (e, s);
+
+            if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
+            var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
+            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections, thickness, counterClockwise);
+        }
+        
+        public void StrokeSectionedArc(Color color, float x, float y, float radius, float startRadians, float endRadians, int sections, float thickness, bool counterClockwise = false)
+        {
+            if (counterClockwise)
+            {
+                (startRadians, endRadians) = (endRadians, startRadians);
+            }
+            if (endRadians < startRadians) endRadians += MathF.PI * 2;
+
+            var vertices = new List<Vector3>();
+            var uv = new List<Vector2>();
+            var indices = new List<ushort>();
+            var indexCount = 0;
+            var sectionSize = (endRadians - startRadians) / sections;
+            for (var i = startRadians; i < endRadians; i += sectionSize)
+            {
+                if (Math.Abs(i - endRadians) < 0.01f) break;
+                
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i) * (radius + thickness / 2),
+                    y + MathF.Sin(i) * (radius + thickness / 2), 0));
+
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i) * (radius - thickness / 2),
+                    y + MathF.Sin(i) * (radius - thickness / 2), 0));
+                    
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i + sectionSize) * (radius + thickness / 2),
+                    y + MathF.Sin(i + sectionSize) * (radius + thickness / 2), 0));
+                
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i + sectionSize) * (radius - thickness / 2),
+                    y + MathF.Sin(i + sectionSize) * (radius - thickness / 2), 0));
+                
+                indices.AddRange(new[]
+                {
+                    (ushort) (indexCount + 0),
+                    (ushort) (indexCount + 2),
+                    (ushort) (indexCount + 1),
+                    (ushort) (indexCount + 1),
+                    (ushort) (indexCount + 2),
+                    (ushort) (indexCount + 3),
+                });
+                
+                uv.AddRange(new []
+                {
+                    new Vector2(0, 0),
+                    new Vector2(1, 0),
+                    new Vector2(0, 1),
+                    new Vector2(1, 1),
+                });
+
+                indexCount += 4;
+            }
+
+            PrepareSolidColorResourceSet(color);
+            DrawMesh(vertices.ToArray(), uv.ToArray(), indices.ToArray());
+        }
+        
+        public void DrawSectorSmooth(Color color, float x, float y, float radius, float startRadians, float endRadians, bool counterClockwise = false)
+        {
+            var s = startRadians;
+            var e = endRadians;
+            if (counterClockwise) (s, e) = (e, s);
+
+            if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
+            var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
+            DrawSector(color, x, y, radius, startRadians, endRadians, sections, counterClockwise);
+        }
+        
+        public void DrawSector(Color color, float x, float y, float radius, float startRadians, float endRadians, int sections, bool counterClockwise = false)
+        {
+            if (counterClockwise)
+            {
+                (startRadians, endRadians) = (endRadians, startRadians);
+            }
+            if (endRadians < startRadians) endRadians += MathF.PI * 2;
+
+            var vertices = new List<Vector3>();
+            var uv = new List<Vector2>();
+            var indices = new List<ushort>();
+            var indexCount = 0;
+            var sectionSize = (endRadians - startRadians) / sections;
+            for (var i = startRadians; i < endRadians; i += sectionSize)
+            {
+                if (Math.Abs(i - endRadians) < 0.01f) break;
+                
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i) * radius,
+                    y + MathF.Sin(i) * radius, 0));
+
+                vertices.Add(new Vector3(
+                    x + MathF.Cos(i + sectionSize) * radius,
+                    y + MathF.Sin(i + sectionSize) * radius, 0));
+                
+                vertices.Add(new Vector3(x, y, 0));
+                
+                indices.AddRange(new[]
+                {
+                    (ushort) (indexCount + 0),
+                    (ushort) (indexCount + 1),
+                    (ushort) (indexCount + 2)
+                });
+                
+                uv.AddRange(new []
+                {
+                    new Vector2(0, 0),
+                    new Vector2(1, 0),
+                    new Vector2(0, 1),
+                });
+
+                indexCount += 3;
+            }
+
+            PrepareSolidColorResourceSet(color);
+            DrawMesh(vertices.ToArray(), uv.ToArray(), indices.ToArray());
         }
         
         public void Render()

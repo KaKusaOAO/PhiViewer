@@ -1,10 +1,15 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Numerics;
+using System.Timers;
+using ManagedBass;
 using Phi.Charting;
 using Phi.Resources;
+using Phi.Viewer.Audio;
 using Phi.Viewer.Graphics;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
@@ -51,9 +56,13 @@ namespace Phi.Viewer
         
         public Texture Background { get; set; }
         
-        public bool IsPlaying { get; set; }
+        public Texture BlurredBackground { get; set; }
         
-        public double PlaybackStartTime { get; set; }
+        public Texture BlurredBackgroundDepth { get; set; }
+        
+        public PipelineProfile BlurredProfile { get; set; }
+        
+        public bool IsPlaying { get; set; }
         
         public float DeltaTime { get; private set; }
 
@@ -64,10 +73,30 @@ namespace Phi.Viewer
         public Vector2 CanvasTranslate { get; set; }
 
         public float CanvasScale { get; set; } = 1;
+        
+        public float AudioOffset { get; set; }
 
-        public float Duration { get; set; } = 133000;
+        public float GetCalculatedAudioOffset()
+        {
+            var offset = AudioOffset + Chart.Model.Offset;
+            return Bass.Info.Latency + offset / MusicPlayer.PlaybackRate;
+        }
 
-        public float PlaybackRate { get; set; } = 1;
+        public AudioPlayer MusicPlayer { get; } = new AudioPlayer();
+        
+        public bool IsLoopEnabled { get; set; }
+
+        public bool EnableClickSound { get; set; } = true;
+        
+        public bool EnableParticles { get; set; } = true;
+
+        public List<AnimatedObject> AnimatedObjects { get; } = new List<AnimatedObject>();
+
+        private object _animObjectsLock = new object();
+
+        private Timer _fixedUpdateTimer = new Timer();
+
+        public Random Random { get; } = new Random();
 
         public float NoteRatio
         {
@@ -92,7 +121,7 @@ namespace Phi.Viewer
             _deltaTimer.Start();
         }
 
-        public double MillisSinceLaunch => _pTimer.ElapsedMilliseconds;
+        public double MillisSinceLaunch => _pTimer.Elapsed.TotalMilliseconds;
         
         public void Init()
         {
@@ -103,6 +132,22 @@ namespace Phi.Viewer
                 File.ReadAllText(@"rrhar/3.json")));
 
             Background = ImageLoader.LoadTextureFromPath(@"rrhar/bg.png");
+
+            Bass.GlobalStreamVolume = 3000;
+            MusicPlayer.LoadFromPath(@"rrhar/base.wav");
+
+            _fixedUpdateTimer.Elapsed += (o, e) =>
+            {
+                lock (_animObjectsLock)
+                {
+                    foreach (var obj in AnimatedObjects)
+                    {
+                        obj.FixedUpdate();
+                    }
+                }
+            };
+            _fixedUpdateTimer.Interval = 5;
+            _fixedUpdateTimer.Start();
         }
 
         public void Update(InputSnapshot snapshot)
@@ -128,7 +173,26 @@ namespace Phi.Viewer
 
             if (IsPlaying)
             {
-                PlaybackTime = (float)(MillisSinceLaunch - PlaybackStartTime);
+                var time = DeltaTime * MusicPlayer.PlaybackRate + PlaybackTime;
+                var audioTime = MusicPlayer.PlaybackTime + GetCalculatedAudioOffset() / MusicPlayer.PlaybackRate;
+
+                if (Math.Abs(time - audioTime) > 20)
+                {
+                    time = audioTime;
+                }
+                
+                if (MusicPlayer.PlaybackTime >= MusicPlayer.Duration)
+                {
+                    MusicPlayer.Stop();
+                    IsPlaying = IsLoopEnabled;
+
+                    if (IsLoopEnabled)
+                    {
+                        MusicPlayer.Play();
+                    }
+                }
+
+                PlaybackTime = Math.Min(time, MusicPlayer.Duration);
                 Time = PlaybackTime;
             }
             else
@@ -138,6 +202,14 @@ namespace Phi.Viewer
             }
         }
 
+        public void AddAnimatedObject(AnimatedObject obj)
+        {
+            lock (_animObjectsLock)
+            {
+                AnimatedObjects.Add(obj);
+            }
+        }
+        
         public void Render()
         {
             Renderer.Begin();
@@ -152,6 +224,25 @@ namespace Phi.Viewer
             
             RenderBack();
             RenderJudgeLines();
+
+            lock (_animObjectsLock)
+            {
+                var removal = new List<AnimatedObject>();
+                foreach (var obj in AnimatedObjects)
+                {
+                    obj.Update();
+                    if (obj.NotNeeded)
+                    {
+                        removal.Add(obj);
+                    }
+                }
+
+                foreach (var obj in removal)
+                {
+                    AnimatedObjects.Remove(obj);
+                }
+            }
+            
             RenderUI();
             
             Renderer.PushClip();
@@ -184,7 +275,7 @@ namespace Phi.Viewer
             var iw = Background.Width;
             var ih = Background.Height;
             var xOffset = (WindowSize.Width - pad * 2) - WindowSize.Height / ih * iw;
-            
+
             Renderer.DrawTexture(Background, pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             
@@ -235,6 +326,55 @@ namespace Phi.Viewer
             var cw = WindowSize.Width - pad * 2;
             var ch = WindowSize.Height;
 
+            var count = 0;
+            var combo = 0;
+            var score = 0;
+
+            if (Chart != null)
+            {
+                foreach (var line in Chart.JudgeLines)
+                {
+                    foreach (var n in line.NotesAbove)
+                    {
+                        if (n.IsCleared) combo++;
+                        count++;
+                    }
+                    
+                    foreach (var n in line.NotesBelow)
+                    {
+                        if (n.IsCleared) combo++;
+                        count++;
+                    }
+                }
+            }
+
+            var scoreStr = "";
+            var maxScore = 1000000;
+            score = count == 0 ? 0 : (int) Math.Round(maxScore * ((double)combo / count));
+            for (var i = 0; i <= MathF.Log10(maxScore) - 2 - MathF.Floor(score == 0 ? 0 : MathF.Log10(score)) + 1; i++)
+            {
+                scoreStr += "0";
+            }
+            scoreStr += score;
+            
+            // -- Play bar
+            var offset = Chart != null ? Chart.Model.Offset * 1000 : 0;
+            offset += AudioOffset;
+            Renderer.DrawRect(Color.FromArgb((int) (0.3 * 255), 255, 255, 255), pad, 0,
+                (Time - offset) / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * Ratio);
+            Renderer.DrawRect(Color.FromArgb((int) (0.3 * 255), 255, 255, 255), pad, 0,
+                MusicPlayer.PlaybackTime / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * Ratio);
+            Renderer.DrawRect(Color.White, (Time - offset) / MusicPlayer.Duration * (WindowSize.Width - pad * 2) + pad, 0,
+                2.5f * Ratio + MathF.Max(0, (MusicPlayer.PlaybackTime / MusicPlayer.Duration - (Time - offset) / MusicPlayer.Duration) * (WindowSize.Width - pad * 2)),
+                10 * Ratio);
+            
+            // -- Pause button
+            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 30 * Ratio + pad, 32 * Ratio, 9 * Ratio, 29 * Ratio);
+            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 47 * Ratio + pad, 32 * Ratio, 9 * Ratio, 29 * Ratio);
+            Renderer.DrawRect(Color.White, 26 * Ratio + pad, 28 * Ratio, 9 * Ratio, 29 * Ratio);
+            Renderer.DrawRect(Color.White, 43 * Ratio + pad, 28 * Ratio, 9 * Ratio, 29 * Ratio);
+            
+            // -- Song title
             Renderer.DrawRect(Color.White, pad + 30 * ratio, ch - 62 * ratio, 7.5f * ratio, 35 * ratio);
             
             var title = "Rrhar'il";
@@ -243,10 +383,24 @@ namespace Phi.Viewer
             var textYOff = size.Height / 2 * sScale;
             Renderer.DrawText(title, Color.White, 28 * ratio * sScale, pad + 50 * ratio, ch - 45 * ratio + textYOff);
 
+            // -- Song difficulty & level
             var diff = "SP Lv.?";
             size = Renderer.MeasureText(diff, 28 * ratio);
             textYOff = size.Height / 2 * sScale;
             Renderer.DrawText(diff, Color.White, 28 * ratio, cw + pad - 40 * ratio - size.Width, ch - 45 * ratio + textYOff);
+            
+            // -- Combo
+            if (combo >= 3)
+            {
+                size = Renderer.MeasureText("COMBO", 22 * Ratio);
+                Renderer.DrawText("COMBO", Color.White, 22 * Ratio, (cw - size.Width) / 2, 72 * ratio);
+                size = Renderer.MeasureText($"{combo}", 58 * Ratio);
+                Renderer.DrawText($"{combo}", Color.White, 58 * Ratio, (cw - size.Width) / 2, 50 * ratio);
+            }
+            
+            // -- Score
+            size = Renderer.MeasureText(scoreStr, 36 * Ratio);
+            Renderer.DrawText(scoreStr, Color.White, 36 * Ratio, cw + pad - 30 * Ratio - size.Width, 45 * ratio);
         }
     }
 }
