@@ -9,7 +9,7 @@
 - [x] Clip buffer stack
 - [x] 處理記憶體洩漏的問題
 - [x] 基本文字繪製
-- [x] 文字還是有一點 glitchy，需要修復
+- [ ] 文字還是有一點 glitchy，需要修復
 - [ ] 背景模糊
 - [ ] 效能優化?
 - [ ] 支援 floorPosition
