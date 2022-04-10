@@ -279,15 +279,17 @@ namespace Phi.Viewer.Graphics
             var window = Viewer.Host.Window;
             var resolutionScale = 1f;
 
-            if (!NeedsUpdateRenderTarget && _renderColor?.Width == (uint)(window.Width * resolutionScale)
-                && _renderColor?.Height == (uint)(window.Height * resolutionScale)) return;
+            var targetWidth = GraphicsDevice.SwapchainFramebuffer.Width; // (uint) (window.Width * resolutionScale);
+            var targetHeight = GraphicsDevice.SwapchainFramebuffer.Height; // (uint) (window.Height * resolutionScale);
+            
+            if (!NeedsUpdateRenderTarget && _renderColor?.Width == targetWidth
+                && _renderColor?.Height == targetHeight) return;
 
             NeedsUpdateRenderTarget = false;
 
             // Textures
             var renderColorDesc = TextureDescription.Texture2D(
-                (uint)(window.Width * resolutionScale),
-                (uint)(window.Height * resolutionScale),
+                targetWidth, targetHeight,
                 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                 TextureUsage.RenderTarget | TextureUsage.Sampled);
             
@@ -319,8 +321,7 @@ namespace Phi.Viewer.Graphics
 
             _renderDepth?.Dispose();
             _renderDepth = factory.CreateTexture(TextureDescription.Texture2D(
-                (uint) (window.Width * resolutionScale), 
-                (uint) (window.Height * resolutionScale), 
+                targetWidth, targetHeight, 
                 1, 1, PixelFormat.R16_UNorm,
                 TextureUsage.DepthStencil | TextureUsage.Sampled, 
                 sampleCount));
@@ -374,6 +375,16 @@ namespace Phi.Viewer.Graphics
             factory.DisposeCollector.Remove(pipeline);
             BasicAdditive.Pipeline = pipeline;
 
+            // Pipeline: Main
+            _mainSwapchainProfile.Pipeline?.Dispose();
+            renderPd = _mainSwapchainProfile.PipelineDescription;
+            renderPd.Outputs = GraphicsDevice.SwapchainFramebuffer.OutputDescription;
+            var mp = factory.CreateGraphicsPipeline(renderPd);
+            factory.DisposeCollector.Remove(mp);
+            _mainSwapchainProfile.Framebuffer = GraphicsDevice.SwapchainFramebuffer;
+            _mainSwapchainProfile.Pipeline = mp;
+            
+            // Clip
             for (var i = 0; i < _clipStack.Count; i++)
             {
                 _clipStack[i].Dispose();
@@ -391,17 +402,18 @@ namespace Phi.Viewer.Graphics
             var factory = Factory;
             var window = Viewer.Host.Window;
             var resolutionScale = 1f;
+
+            var targetWidth = GraphicsDevice.SwapchainFramebuffer.Width;
+            var targetHeight = GraphicsDevice.SwapchainFramebuffer.Height;
             
             var clipColor = factory.CreateTexture(TextureDescription.Texture2D(
-                (uint)(window.Width * resolutionScale),
-                (uint)(window.Height * resolutionScale),
+                targetWidth, targetHeight,
                 1, 1, PixelFormat.R8_G8_B8_A8_UNorm,
                 TextureUsage.RenderTarget | TextureUsage.Sampled));
             clipColor.Name = $"Clip Map Color (depth:{_clipStack.Count})";
             
             var clipDepth = factory.CreateTexture(TextureDescription.Texture2D(
-                (uint)(window.Width * resolutionScale),
-                (uint)(window.Height * resolutionScale),
+                targetWidth, targetHeight,
                 1, 1, PixelFormat.D24_UNorm_S8_UInt,
                 TextureUsage.DepthStencil | TextureUsage.Sampled));
             clipDepth.Name = $"Clip Map Depth (depth:{_clipStack.Count})";
@@ -440,6 +452,7 @@ namespace Phi.Viewer.Graphics
             {
                 GraphicsDevice.MainSwapchain.Resize((uint)window.Width, (uint)window.Height);
             }
+            UpdateRenderTarget();
 
             _metrics = new MetricsData();
             CommandList.Begin();
@@ -561,9 +574,8 @@ namespace Phi.Viewer.Graphics
             CommandList.PopDebugGroup();
         }
 
-        public void DrawToMainSwapchain()
+        public void ResolveTexture()
         {
-            CommandList.PushDebugGroup("DrawToMainSwapchain");
             if (_renderColor.SampleCount != TextureSampleCount.Count1)
             {
                 CommandList.ResolveTexture(_renderColor, _renderColorResolved);
@@ -572,7 +584,11 @@ namespace Phi.Viewer.Graphics
             {
                 CommandList.CopyTexture(_renderColor, _renderColorResolved);
             }
+        }
 
+        public void DrawToMainSwapchain()
+        {
+            CommandList.PushDebugGroup("DrawToMainSwapchain");
             SetCurrentPipelineProfile(_mainSwapchainProfile);
             CommandList.ClearColorTarget(0, RgbaFloat.Black);
             DrawTexture(_renderColorResolved, 0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
@@ -640,6 +656,7 @@ namespace Phi.Viewer.Graphics
 
         public void StrokeRect(Color color, float x, float y, float width, float height, float thickness)
         {
+            CommandList.PushDebugGroup("StrokeRect");
             Vector3[] mesh =
             {
                 // Outer
@@ -686,10 +703,12 @@ namespace Phi.Viewer.Graphics
 
             PrepareSolidColorResourceSet(color);
             DrawMesh(mesh, uv, indices);
+            CommandList.PopDebugGroup();
         }
 
         public void StrokeArc(Color color, float x, float y, float radius, float startRadians, float endRadians, float thickness, bool counterClockwise = false)
         {
+            CommandList.PushDebugGroup("StrokeArc");
             var s = startRadians;
             var e = endRadians;
             if (counterClockwise) (s, e) = (e, s);
@@ -697,10 +716,12 @@ namespace Phi.Viewer.Graphics
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
             var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
             StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections, thickness, counterClockwise);
+            CommandList.PopDebugGroup();
         }
         
         public void StrokeSectionedArc(Color color, float x, float y, float radius, float startRadians, float endRadians, int sections, float thickness, bool counterClockwise = false)
         {
+            CommandList.PushDebugGroup($"StrokeSectionedArc ({sections} sections)");
             if (counterClockwise)
             {
                 (startRadians, endRadians) = (endRadians, startRadians);
@@ -755,10 +776,12 @@ namespace Phi.Viewer.Graphics
 
             PrepareSolidColorResourceSet(color);
             DrawMesh(vertices.ToArray(), uv.ToArray(), indices.ToArray());
+            CommandList.PopDebugGroup();
         }
         
         public void DrawSectorSmooth(Color color, float x, float y, float radius, float startRadians, float endRadians, bool counterClockwise = false)
         {
+            CommandList.PushDebugGroup("DrawSectorSmooth");
             var s = startRadians;
             var e = endRadians;
             if (counterClockwise) (s, e) = (e, s);
@@ -766,10 +789,12 @@ namespace Phi.Viewer.Graphics
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
             var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
             DrawSector(color, x, y, radius, startRadians, endRadians, sections, counterClockwise);
+            CommandList.PopDebugGroup();
         }
         
         public void DrawSector(Color color, float x, float y, float radius, float startRadians, float endRadians, int sections, bool counterClockwise = false)
         {
+            CommandList.PushDebugGroup($"DrawSector ({sections} sections)");
             if (counterClockwise)
             {
                 (startRadians, endRadians) = (endRadians, startRadians);
@@ -814,6 +839,7 @@ namespace Phi.Viewer.Graphics
 
             PrepareSolidColorResourceSet(color);
             DrawMesh(vertices.ToArray(), uv.ToArray(), indices.ToArray());
+            CommandList.PopDebugGroup();
         }
         
         public void Render()
@@ -824,7 +850,6 @@ namespace Phi.Viewer.Graphics
             GraphicsDevice.SwapBuffers();
             
             Factory.DisposeCollector.DisposeAll();
-            UpdateRenderTarget();
             GC.Collect();
         }
 
@@ -994,8 +1019,10 @@ namespace Phi.Viewer.Graphics
                     }
                 }
 
+                CommandList.PushDebugGroup($"Generate Character Texture - {c}");
                 GraphicsDevice.UpdateTexture(texture, buffer, _fontTexPad, _fontTexPad, 0, w,
                     h, 1, 0, 0);
+                CommandList.PopDebugGroup();
 
                 _characters.Add(c, new DrawableCharacter
                 {
@@ -1020,7 +1047,6 @@ namespace Phi.Viewer.Graphics
             if (_ft == null) return;
             
             var scale = fontSize / _fontSize * 72 / _fontRes;
-
             char? lastChar = null;
             
             CommandList.PushDebugGroup("DrawText");
@@ -1039,8 +1065,10 @@ namespace Phi.Viewer.Graphics
 
                 if (c != ' ')
                 {
+                    CommandList.PushDebugGroup($"Character - {c}");
                     DrawTexture(ch.Texture, xPos, yPos, w, h,
                         new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 0, color.A / 255f));
+                    CommandList.PopDebugGroup();
                 }
             }
             CommandList.PopDebugGroup();

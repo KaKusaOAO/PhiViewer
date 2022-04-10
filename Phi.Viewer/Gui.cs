@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using ImGuiNET;
@@ -7,6 +8,7 @@ using ManagedBass;
 using Phi.Charting.Events;
 using Phi.Charting.Notes;
 using Phi.Viewer.Audio;
+using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
 
@@ -304,24 +306,35 @@ namespace Phi.Viewer
             }
         }
 
+        private void DisplayViewerContent()
+        {
+            var r = viewer.Renderer;
+            var tex = r.ResolvedRenderTargetTexture;
+            var img = renderer.GetOrCreateImGuiBinding(r.Factory, tex);
+
+            var size = new Vector2(
+                ImGui.GetWindowWidth(),
+                (float)tex.Height / tex.Width * ImGui.GetWindowWidth()
+            );
+            var maxHeight = ImGui.GetWindowHeight() - ImGui.GetFrameHeight();
+            if (size.Y > maxHeight)
+            {
+                size /= size.Y / maxHeight;
+            }
+
+            var padX = (ImGui.GetWindowWidth() - size.X) / 2;
+            var padY = (ImGui.GetWindowHeight() + ImGui.GetFrameHeight() - size.Y) / 2;
+            var uv0 = new Vector2(0, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? 1 : 0);
+            var uv1 = new Vector2(1, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? 0 : 1);
+            ImGui.SetCursorPos(new Vector2(padX, padY));
+            ImGui.Image(img, size, uv0, uv1);
+        }
+
         private void DisplayControlContent()
         {
-            if (ImGui.Button("Play"))
-            {
-                viewer.IsPlaying = true;
-                viewer.MusicPlayer.Play(viewer.MusicPlayer.PlaybackTime);
-            }
-
-            ImGui.SameLine();
-            if (ImGui.Button("Stop"))
-            {
-                viewer.IsPlaying = false;
-                viewer.MusicPlayer.Stop();
-            }
-
-            ImGui.SameLine();
 
             var p = viewer.PlaybackTime;
+            ImGui.PushItemWidth(ImGui.GetWindowWidth() - 20);
             ImGui.PushID("playback_time");
             ImGui.SliderFloat("", ref p, 0, viewer.MusicPlayer.Duration);
             if (ImGui.IsItemEdited())
@@ -329,93 +342,96 @@ namespace Phi.Viewer
                 viewer.MusicPlayer.Seek(p);
                 viewer.PlaybackTime = p;
             }
-
             ImGui.PopID();
+            ImGui.PopItemWidth();
 
-            var bl = viewer.ForceRenderOffscreen;
-            ImGui.Checkbox("Force Render Offscreen", ref bl);
-            viewer.ForceRenderOffscreen = bl;
-
-            ImGui.SameLine();
-            bl = viewer.UseUniqueSpeed;
-            ImGui.Checkbox("Use Unique Speed", ref bl);
-            viewer.UseUniqueSpeed = bl;
-
-            ImGui.SameLine();
-            bl = viewer.DisableGlobalClip;
-            ImGui.Checkbox("Disable Global Clip", ref bl);
-            viewer.DisableGlobalClip = bl;
-
-            ImGui.SameLine();
-            ImGui.TextColored(new Vector4(1, 1, 1, 0.5f), "(?)");
-
-            if (ImGui.IsItemHovered())
+            if (ImGui.Button(viewer.IsPlaying ? "Pause" : "Play"))
             {
-                ImGui.SetTooltip("You will see notes and lines outside of the screen range.");
+                viewer.IsPlaying = !viewer.IsPlaying;
+                if (viewer.IsPlaying)
+                {
+                    viewer.MusicPlayer.Play(viewer.MusicPlayer.PlaybackTime);
+                }
+                else
+                {
+                    viewer.MusicPlayer.Stop();
+                }
             }
 
             ImGui.SameLine();
-            bl = viewer.IsLoopEnabled;
+            if (ImGui.Button("Stop"))
+            {
+                viewer.IsPlaying = false;
+                viewer.MusicPlayer.Stop();
+                viewer.MusicPlayer.Seek(0);
+                viewer.PlaybackTime = 0;
+            }
+            
+            ImGui.SameLine();
+            var bl = viewer.IsLoopEnabled;
             ImGui.Checkbox("Loop", ref bl);
             viewer.IsLoopEnabled = bl;
-
-            p = viewer.MusicPlayer.PlaybackRate;
-            ImGui.SliderFloat("Playback Rate", ref p, 0.5f, 2f);
+            
+            ImGui.SameLine();
+            p = viewer.MusicPlayer.Volume;
+            ImGui.PushID("playback_vol");
+            ImGui.PushItemWidth(100);
+            ImGui.SliderFloat("Volume", ref p, 0, 1);
+            ImGui.PopItemWidth();
             if (ImGui.IsItemEdited())
             {
-                viewer.MusicPlayer.PlaybackRate = p;
+                viewer.MusicPlayer.Volume = p;
             }
+            ImGui.PopID();
 
-            var i = (int) viewer.MusicPlayer.PlaybackPitch;
-            ImGui.SliderInt("Playback Pitch (int)", ref i, -12, 12);
-            if (ImGui.IsItemEdited())
+            if (ImGui.CollapsingHeader("Charts"))
             {
-                viewer.MusicPlayer.PlaybackPitch = i;
-            }
+                if (ImGui.BeginTable("_chartList", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders))
+                {
+                    ImGui.TableSetupColumn("Title");
+                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 100);
+                    ImGui.TableHeadersRow();
 
-            p = viewer.MusicPlayer.PlaybackPitch;
-            ImGui.SliderFloat("Playback Pitch (float)", ref p, -12, 12);
-            if (ImGui.IsItemEdited())
-            {
-                viewer.MusicPlayer.PlaybackPitch = p;
-            }
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.BeginGroup();
+                    ImGui.Dummy(new Vector2(0, 0));
+                    ImGui.Text("Rrhar'il");
+                    ImGui.Dummy(new Vector2(0, 0));
+                    ImGui.EndGroup();
+                    ImGui.SameLine();
+                    
+                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1f, 1f, 1f, 0.5f));
+                    ImGui.BeginDisabled(true);
+                    ImGui.Button("AT Lv.16");
+                    ImGui.EndDisabled();
+                    ImGui.PopStyleColor(1);
+                    
+                    ImGui.TableNextColumn();
+                    if (ImGui.Button("Load"))
+                    {
+                        var pathBase = @"D:\AppServ\www\phigros\assets\charts\";
+                        viewer.Chart = new ChartView(Charting.Chart.Deserialize(
+                            File.ReadAllText(@$"{pathBase}rrhar\3.json")));
 
-            if (ImGui.Button("Reset Rate"))
-            {
-                viewer.MusicPlayer.PlaybackRate = 1;
-            }
+                        viewer.Background?.Dispose();
+                        viewer.Background = ImageLoader.LoadTextureFromPath(@$"{pathBase}rrhar\bg.png");
 
-            ImGui.SameLine();
+                        viewer.MusicPlayer.Stop();
+                        viewer.MusicPlayer.Seek(0);
+                        viewer.IsPlaying = false;
+                        viewer.PlaybackTime = 0;
+                        
+                        viewer.MusicPlayer.Dispose();
+                        viewer.MusicPlayer.LoadFromPath(@$"{pathBase}rrhar\base.wav");
 
-            if (ImGui.Button("Reset Pitch"))
-            {
-                viewer.MusicPlayer.PlaybackPitch = 0;
-            }
-
-            ImGui.SameLine();
-
-            bl = viewer.MusicPlayer.SyncSpeedAndPitch;
-            ImGui.Checkbox("Sync Speed & Pitch", ref bl);
-            viewer.MusicPlayer.SyncSpeedAndPitch = bl;
-
-            var vec2 = viewer.CanvasTranslate;
-            ImGui.DragFloat2("Canvas Translate", ref vec2);
-            viewer.CanvasTranslate = vec2;
-
-            p = viewer.CanvasScale;
-            ImGui.SliderFloat("Canvas Scale", ref p, 0.5f, 2f);
-            viewer.CanvasScale = p;
-
-            if (ImGui.Button("Reset Translate"))
-            {
-                viewer.CanvasTranslate = Vector2.Zero;
-            }
-
-            ImGui.SameLine();
-
-            if (ImGui.Button("Reset Scale"))
-            {
-                viewer.CanvasScale = 1;
+                        viewer.SongTitle = "Rrhar'il";
+                        viewer.DiffName = "AT";
+                        viewer.DiffLevel = 16;
+                    }
+                    
+                    ImGui.EndTable();
+                }
             }
         }
 
@@ -692,6 +708,12 @@ namespace Phi.Viewer
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
+                    ImGui.Text("FPS");
+                    ImGui.TableNextColumn();
+                    ImGui.TextWrapped($"{ImGui.GetIO().Framerate:F2}");
+                    
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
                     ImGui.Text("Vertices");
                     ImGui.TableNextColumn();
                     ImGui.TextWrapped($"{m.VerticesCount}");
@@ -700,7 +722,7 @@ namespace Phi.Viewer
                     ImGui.TableNextColumn();
                     ImGui.Text("Indices");
                     ImGui.TableNextColumn();
-                    ImGui.TextWrapped($"{m.IndicesCount}");
+                    ImGui.TextWrapped($"I: {m.IndicesCount}, T: {m.IndicesCount / 3}");
                     
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
@@ -718,6 +740,12 @@ namespace Phi.Viewer
 
                 if (ImGui.BeginTable("_chartMetrics", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
                 {
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.Text("Offset");
+                    ImGui.TableNextColumn();
+                    ImGui.TextWrapped($"{c.Model.Offset}");
+                    
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
                     ImGui.Text("Lines");
@@ -751,15 +779,140 @@ namespace Phi.Viewer
                 {
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
-                    ImGui.Text("Animated Objects");
+                    ImGui.PushID("_animObjectsViewMetrics");
+                    var open = ImGui.TreeNodeEx("Animated Objects");
+                    ImGui.PopID();
                     ImGui.TableNextColumn();
                     ImGui.TextWrapped($"{v.AnimatedObjects.Count}");
+
+                    if (open)
+                    {
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.Text("JudgeEffects");
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped($"{v.AnimatedObjects.Count(n => n is JudgeEffect)}");
+                        
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.Text("OneShotAudio");
+                        ImGui.TableNextColumn();
+                        ImGui.TextWrapped($"{v.AnimatedObjects.Count(n => n is OneShotAudio)}");
+                        
+                        ImGui.TreePop();
+                    }
 
                     ImGui.EndTable();
                 }
             }
         }
 
+        private void DisplaySettingsContent()
+        {
+            ImGui.PushItemWidth(MathF.Min(225, ImGui.GetWindowWidth() * 0.5f));
+            
+            if (ImGui.CollapsingHeader("Graphics"))
+            {
+                var bl = viewer.ForceRenderOffscreen;
+                ImGui.Checkbox("Force Render Offscreen", ref bl);
+                viewer.ForceRenderOffscreen = bl;
+
+                bl = viewer.UseUniqueSpeed;
+                ImGui.Checkbox("Use Unique Speed", ref bl);
+                viewer.UseUniqueSpeed = bl;
+                
+                ImGui.SameLine();
+                ImGui.TextColored(new Vector4(1, 1, 1, 0.5f), "(?)");
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip("If enabled, speed events won't take affect.");
+                }
+                
+                bl = viewer.DisableGlobalClip;
+                ImGui.Checkbox("Disable Global Clip", ref bl);
+                viewer.DisableGlobalClip = bl;
+
+                ImGui.SameLine();
+                ImGui.TextColored(new Vector4(1, 1, 1, 0.5f), "(?)");
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip("If enabled, you will see notes and lines outside of the screen range.");
+                }
+                
+                var vec2 = viewer.CanvasTranslate;
+                ImGui.DragFloat2("Canvas Translate", ref vec2);
+                viewer.CanvasTranslate = vec2;
+
+                var p = viewer.CanvasScale;
+                ImGui.SliderFloat("Canvas Scale", ref p, 0.5f, 2f);
+                viewer.CanvasScale = p;
+
+                if (ImGui.Button("Reset Translate"))
+                {
+                    viewer.CanvasTranslate = Vector2.Zero;
+                }
+
+                ImGui.SameLine();
+
+                if (ImGui.Button("Reset Scale"))
+                {
+                    viewer.CanvasScale = 1;
+                }
+                
+                bl = viewer.EnableParticles;
+                ImGui.Checkbox("Enable Click Particle", ref bl);
+                viewer.EnableParticles = bl;
+            }
+
+            if (ImGui.CollapsingHeader("Audio"))
+            {
+                var p = viewer.MusicPlayer.PlaybackRate;
+                ImGui.SliderFloat("Playback Rate", ref p, 0.5f, 2f);
+                if (ImGui.IsItemEdited())
+                {
+                    viewer.MusicPlayer.PlaybackRate = p;
+                }
+
+                var i = (int) viewer.MusicPlayer.PlaybackPitch;
+                ImGui.SliderInt("Playback Pitch (int)", ref i, -12, 12);
+                if (ImGui.IsItemEdited())
+                {
+                    viewer.MusicPlayer.PlaybackPitch = i;
+                }
+
+                p = viewer.MusicPlayer.PlaybackPitch;
+                ImGui.SliderFloat("Playback Pitch (float)", ref p, -12, 12);
+                if (ImGui.IsItemEdited())
+                {
+                    viewer.MusicPlayer.PlaybackPitch = p;
+                }
+
+                if (ImGui.Button("Reset Rate"))
+                {
+                    viewer.MusicPlayer.PlaybackRate = 1;
+                }
+
+                ImGui.SameLine();
+
+                if (ImGui.Button("Reset Pitch"))
+                {
+                    viewer.MusicPlayer.PlaybackPitch = 0;
+                }
+
+                ImGui.SameLine();
+
+                var bl = viewer.MusicPlayer.SyncSpeedAndPitch;
+                ImGui.Checkbox("Sync Speed & Pitch", ref bl);
+                viewer.MusicPlayer.SyncSpeedAndPitch = bl;
+                
+                bl = viewer.EnableClickSound;
+                ImGui.Checkbox("Enable Click FX", ref bl);
+                viewer.EnableClickSound = bl;
+            }
+            
+            ImGui.PopItemWidth();
+        }
+        
         public void Render(GraphicsDevice device, CommandList list)
         {
             list.SetFramebuffer(device.SwapchainFramebuffer);
@@ -800,6 +953,18 @@ namespace Phi.Viewer
             if (ImGui.Begin("Metrics"))
             {
                 DisplayMetricsContent();
+                ImGui.End();
+            }
+
+            if (ImGui.Begin("Settings"))
+            {
+                DisplaySettingsContent();
+                ImGui.End();
+            }
+
+            if (ImGui.Begin("Viewer"))
+            {
+                DisplayViewerContent();
                 ImGui.End();
             }
             

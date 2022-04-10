@@ -32,7 +32,7 @@ namespace Phi.Viewer
         
         public Renderer Renderer { get; private set; }
         
-        public ChartView Chart { get; private set; }
+        public ChartView Chart { get; set; }
 
         public float Time { get; set; }
         
@@ -97,6 +97,12 @@ namespace Phi.Viewer
         private Timer _fixedUpdateTimer = new Timer();
 
         public Random Random { get; } = new Random();
+        
+        public string SongTitle { get; set; }
+        
+        public string DiffName { get; set; }
+        
+        public int DiffLevel { get; set; }
 
         public float NoteRatio
         {
@@ -128,12 +134,13 @@ namespace Phi.Viewer
             Renderer = new Renderer(this);
             Gui = new Gui(this);
 
+            Bass.GlobalStreamVolume = 3000;
+            
             Chart = new ChartView(Charting.Chart.Deserialize(
                 File.ReadAllText(@"rrhar/3.json")));
 
             Background = ImageLoader.LoadTextureFromPath(@"rrhar/bg.png");
 
-            Bass.GlobalStreamVolume = 3000;
             MusicPlayer.LoadFromPath(@"rrhar/base.wav");
 
             _fixedUpdateTimer.Elapsed += (o, e) =>
@@ -255,8 +262,7 @@ namespace Phi.Viewer
                 Renderer.Scale(1, -1);
                 Renderer.Translate(0, -WindowSize.Height);
             }
-            Renderer.DrawToMainSwapchain();
-            
+            Renderer.ResolveTexture();
             Renderer.PopClip();
             
             Gui.Render(Renderer.GraphicsDevice, Renderer.CommandList);
@@ -377,14 +383,15 @@ namespace Phi.Viewer
             // -- Song title
             Renderer.DrawRect(Color.White, pad + 30 * ratio, ch - 62 * ratio, 7.5f * ratio, 35 * ratio);
             
-            var title = "Rrhar'il";
+            var title = SongTitle ?? "<null>";
             var size = Renderer.MeasureText(title, 28 * ratio);
             var sScale = size.Width > 545 * ratio ? 545 * ratio / size.Width : 1;
             var textYOff = size.Height / 2 * sScale;
             Renderer.DrawText(title, Color.White, 28 * ratio * sScale, pad + 50 * ratio, ch - 45 * ratio + textYOff);
 
             // -- Song difficulty & level
-            var diff = "SP Lv.?";
+            var lvl = DiffLevel < 0 ? "?" : DiffLevel + "";
+            var diff = $"{DiffName ?? "<null>"} Lv.{lvl}";
             size = Renderer.MeasureText(diff, 28 * ratio);
             textYOff = size.Height / 2 * sScale;
             Renderer.DrawText(diff, Color.White, 28 * ratio, cw + pad - 40 * ratio - size.Width, ch - 45 * ratio + textYOff);
