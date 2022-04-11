@@ -8,6 +8,7 @@ using ManagedBass;
 using Phi.Charting.Events;
 using Phi.Charting.Notes;
 using Phi.Viewer.Audio;
+using Phi.Viewer.Graphics;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
@@ -18,7 +19,7 @@ namespace Phi.Viewer
     {
         private PhiViewer viewer;
 
-        private ImGuiRenderer renderer;
+        private BetterImGuiRenderer renderer;
 
         private Stopwatch _stopwatch = new Stopwatch();
 
@@ -26,7 +27,7 @@ namespace Phi.Viewer
         {
             this.viewer = viewer;
             var window = viewer.Host.Window;
-            renderer = new ImGuiRenderer(window.GraphicsDevice,
+            renderer = new BetterImGuiRenderer(window.GraphicsDevice,
                 window.GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription,
                 (int) window.Width, (int) window.Height);
 
@@ -46,7 +47,7 @@ namespace Phi.Viewer
 
             var window = viewer.Host.Window;
             renderer.WindowResized((int) window.Width, (int) window.Height);
-            renderer.Update((float) delta, snapshot);
+            renderer.EnhancedUpdate((float) delta, snapshot);
         }
 
         private object _inspectingObject = null;
@@ -908,6 +909,21 @@ namespace Phi.Viewer
                 bl = viewer.EnableClickSound;
                 ImGui.Checkbox("Enable Click FX", ref bl);
                 viewer.EnableClickSound = bl;
+            }
+
+            if (ImGui.CollapsingHeader("Viewer"))
+            {
+                var str = viewer.SongTitle ?? "<null>";
+                ImGui.InputText("Song Title", ref str, 256);
+                viewer.SongTitle = str;
+                
+                str = viewer.DiffName ?? "<null>";
+                ImGui.InputText("Difficulty Name", ref str, 64);
+                viewer.DiffName = str;
+
+                var i = viewer.DiffLevel;
+                ImGui.SliderInt("Difficulty", ref i, -1, 32);
+                viewer.DiffLevel = i;
             }
             
             ImGui.PopItemWidth();

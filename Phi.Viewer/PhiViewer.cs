@@ -367,18 +367,18 @@ namespace Phi.Viewer
             var offset = Chart != null ? Chart.Model.Offset * 1000 : 0;
             offset += AudioOffset;
             Renderer.DrawRect(Color.FromArgb((int) (0.3 * 255), 255, 255, 255), pad, 0,
-                (Time - offset) / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * Ratio);
+                (Time - offset) / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * ratio);
             Renderer.DrawRect(Color.FromArgb((int) (0.3 * 255), 255, 255, 255), pad, 0,
-                MusicPlayer.PlaybackTime / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * Ratio);
+                MusicPlayer.PlaybackTime / MusicPlayer.Duration * (WindowSize.Width - pad * 2), 10 * ratio);
             Renderer.DrawRect(Color.White, (Time - offset) / MusicPlayer.Duration * (WindowSize.Width - pad * 2) + pad, 0,
-                2.5f * Ratio + MathF.Max(0, (MusicPlayer.PlaybackTime / MusicPlayer.Duration - (Time - offset) / MusicPlayer.Duration) * (WindowSize.Width - pad * 2)),
-                10 * Ratio);
+                2.5f * ratio + MathF.Max(0, (MusicPlayer.PlaybackTime / MusicPlayer.Duration - (Time - offset) / MusicPlayer.Duration) * (WindowSize.Width - pad * 2)),
+                10 * ratio);
             
             // -- Pause button
-            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 30 * Ratio + pad, 32 * Ratio, 9 * Ratio, 29 * Ratio);
-            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 47 * Ratio + pad, 32 * Ratio, 9 * Ratio, 29 * Ratio);
-            Renderer.DrawRect(Color.White, 26 * Ratio + pad, 28 * Ratio, 9 * Ratio, 29 * Ratio);
-            Renderer.DrawRect(Color.White, 43 * Ratio + pad, 28 * Ratio, 9 * Ratio, 29 * Ratio);
+            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 30 * ratio + pad, 32 * ratio, 9 * ratio, 29 * ratio);
+            Renderer.DrawRect(Color.FromArgb(0x88, 0, 0, 0), 47 * ratio + pad, 32 * ratio, 9 * ratio, 29 * ratio);
+            Renderer.DrawRect(Color.White, 26 * ratio + pad, 28 * ratio, 9 * ratio, 29 * ratio);
+            Renderer.DrawRect(Color.White, 43 * ratio + pad, 28 * ratio, 9 * ratio, 29 * ratio);
             
             // -- Song title
             Renderer.DrawRect(Color.White, pad + 30 * ratio, ch - 62 * ratio, 7.5f * ratio, 35 * ratio);
@@ -399,15 +399,15 @@ namespace Phi.Viewer
             // -- Combo
             if (combo >= 3)
             {
-                size = Renderer.MeasureText("COMBO", 22 * Ratio);
-                Renderer.DrawText("COMBO", Color.White, 22 * Ratio, (cw - size.Width) / 2, 72 * ratio);
-                size = Renderer.MeasureText($"{combo}", 58 * Ratio);
-                Renderer.DrawText($"{combo}", Color.White, 58 * Ratio, (cw - size.Width) / 2, 50 * ratio);
+                size = Renderer.MeasureText("COMBO", 22 * ratio);
+                Renderer.DrawText("COMBO", Color.White, 22 * ratio, (cw - size.Width) / 2, 87 * ratio);
+                size = Renderer.MeasureText($"{combo}", 58 * ratio);
+                Renderer.DrawText($"{combo}", Color.White, 58 * ratio, (cw - size.Width) / 2, 60 * ratio);
             }
             
             // -- Score
-            size = Renderer.MeasureText(scoreStr, 36 * Ratio);
-            Renderer.DrawText(scoreStr, Color.White, 36 * Ratio, cw + pad - 30 * Ratio - size.Width, 45 * ratio);
+            size = Renderer.MeasureText(scoreStr, 36 * ratio);
+            Renderer.DrawText(scoreStr, Color.White, 36 * ratio, cw + pad - 30 * ratio - size.Width, 55 * ratio);
         }
     }
 }
