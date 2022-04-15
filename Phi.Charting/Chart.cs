@@ -1,35 +1,37 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace Phi.Charting
 {
     public class Chart
     {
-        [JsonProperty("offset")]
+        [JsonPropertyName("offset")]
         public float Offset { get; set; }
         
-        [JsonProperty("numOfNotes")]
+        [JsonPropertyName("numOfNotes")]
         public int NoteCount { get; set; }
         
-        [JsonProperty("judgeLineList")]
+        [JsonPropertyName("judgeLineList")]
         public List<JudgeLine> JudgeLines { get; set; }
 
-        public static Chart Deserialize(string json)
+        public static Chart Deserialize(Stream stream)
         {
-            var data = JsonConvert.DeserializeObject<JObject>(json);
+            var data = JsonSerializer.Deserialize<JsonObject>(stream);
             if (data == null) return null;
             
-            var formatVersion = data["formatVersion"]?.Value<int>() ?? 0;
+            var formatVersion = data["formatVersion"]?.AsValue().GetValue<int>() ?? 0;
             if (formatVersion < 1) return null;
 
             var chart = new Chart
             {
-                Offset = data["offset"]?.Value<float>() ?? 0,
-                NoteCount = data["numOfNotes"]?.Value<int>() ?? 0,
-                JudgeLines = ((JArray) data["judgeLineList"])?.ToObject<List<JudgeLine>>() ?? new List<JudgeLine>()
+                Offset = data["offset"]?.AsValue().GetValue<float>() ?? 0,
+                NoteCount = data["numOfNotes"]?.AsValue().GetValue<int>() ?? 0,
+                JudgeLines = ((JsonArray) data["judgeLineList"])?.Select(n => n.Deserialize<JudgeLine>()).ToList() ?? new List<JudgeLine>()
             };
 
             foreach (var line in chart.JudgeLines)

@@ -1,19 +1,19 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Phi.Charting.Events
 {
     public abstract class RangedBiStateLineEvent : AbstractLineEvent
     {
-        [JsonProperty("start")]
+        [JsonPropertyName("start")]
         public float Start { get; set; }
         
-        [JsonProperty("end")]
+        [JsonPropertyName("end")]
         public float End { get; set; }
         
-        [JsonProperty("start2")]
+        [JsonPropertyName("start2")]
         public float Start2 { get; set; }
         
-        [JsonProperty("end2")]
+        [JsonPropertyName("end2")]
         public float End2 { get; set; }
     }
 }

@@ -1,13 +1,13 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Phi.Charting.Events
 {
     public abstract class AbstractLineEvent
     {
-        [JsonProperty("startTime")]
+        [JsonPropertyName("startTime")]
         public float StartTime { get; set; }
 
-        [JsonProperty("endTime")]
+        [JsonPropertyName("endTime")]
         public float EndTime { get; set; }
     }
 }

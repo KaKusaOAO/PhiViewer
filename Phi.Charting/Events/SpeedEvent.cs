@@ -1,10 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Phi.Charting.Events
 {
     public class SpeedEvent : AbstractLineEvent
     {
-        [JsonProperty("value")]
+        [JsonPropertyName("value")]
         public float Value { get; set; }
     }
 }

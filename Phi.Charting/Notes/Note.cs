@@ -1,25 +1,25 @@
-﻿using Newtonsoft.Json;
+﻿using System.Text.Json.Serialization;
 
 namespace Phi.Charting.Notes
 {
     public class Note
     {
-        [JsonProperty("type")]
+        [JsonPropertyName("type")]
         public NoteType Type { get; set; }
         
-        [JsonProperty("time")]
+        [JsonPropertyName("time")]
         public float Time { get; set; }
         
-        [JsonProperty("positionX")]
+        [JsonPropertyName("positionX")]
         public float PosX { get; set; }
         
-        [JsonProperty("speed")]
+        [JsonPropertyName("speed")]
         public float Speed { get; set; }
         
-        [JsonProperty("floorPosition")]
+        [JsonPropertyName("floorPosition")]
         public float FloorPosition { get; set; }
         
-        [JsonProperty("holdTime")]
+        [JsonPropertyName("holdTime")]
         public float HoldTime { get; set; }
         
         [JsonIgnore]

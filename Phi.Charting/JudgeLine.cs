@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 using Phi.Charting.Events;
 using Phi.Charting.Notes;
 
@@ -8,34 +8,34 @@ namespace Phi.Charting
 {
     public class JudgeLine
     {
-        [JsonProperty("bpm")]
+        [JsonPropertyName("bpm")]
         public float Bpm { get; set; }
         
-        [JsonProperty("speedEvents")]
+        [JsonPropertyName("speedEvents")]
         public List<SpeedEvent> SpeedEvents { get; set; }
         
-        [JsonProperty("notesAbove")]
+        [JsonPropertyName("notesAbove")]
         public List<Note> NotesAbove { get; set; }
         
-        [JsonProperty("notesBelow")]
+        [JsonPropertyName("notesBelow")]
         public List<Note> NotesBelow { get; set; }
         
-        [JsonProperty("judgeLineDisappearEvents")]
+        [JsonPropertyName("judgeLineDisappearEvents")]
         public List<LineFadeEvent> LineFadeEvents { get; set; }
 
-        [JsonProperty("judgeLineMoveEvents")]
+        [JsonPropertyName("judgeLineMoveEvents")]
         public List<LineMoveEvent> LineMoveEvents { get; set; }
 
-        [JsonProperty("judgeLineRotateEvents")]
+        [JsonPropertyName("judgeLineRotateEvents")]
         public List<LineRotateEvent> LineRotateEvents { get; set; }
         
-        [JsonProperty("numOfNotesAbove")]
+        [JsonPropertyName("numOfNotesAbove")]
         public int NotesCountAbove { get; set; }
         
-        [JsonProperty("numOfNotesBelow")]
+        [JsonPropertyName("numOfNotesBelow")]
         public int NotesCountBelow { get; set; }
         
-        [JsonProperty("numOfNotes")]
+        [JsonPropertyName("numOfNotes")]
         public int NotesCount { get; set; }
 
         internal void ProcessEvents(int formatVersion)
