@@ -282,7 +282,12 @@ namespace Phi.Viewer
             var ih = Background.Height;
             var xOffset = (WindowSize.Width - pad * 2) - WindowSize.Height / ih * iw;
 
+            Renderer.PushFilter(new FilterDescription
+            {
+                BlurRadius = 20
+            });
             Renderer.DrawTexture(Background, pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
+            Renderer.PopFilter();
             Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             
             Renderer.PopClip();

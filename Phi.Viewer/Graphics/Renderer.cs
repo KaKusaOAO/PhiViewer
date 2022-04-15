@@ -68,6 +68,8 @@ namespace Phi.Viewer.Graphics
         // Clip framebuffer
         private List<ClipStateEntry> _clipStack = new List<ClipStateEntry>();
         private int _clipLevel;
+
+        private Stack<FilterDescription> _filters = new Stack<FilterDescription>();
         
         private Texture _renderColor;
         private Texture _renderColorResolved;
@@ -162,7 +164,8 @@ namespace Phi.Viewer.Graphics
                 new ResourceLayoutElementDescription("Sampler", ResourceKind.Sampler, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("Tint", ResourceKind.UniformBuffer, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("ClipMap", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
-                new ResourceLayoutElementDescription("ClipMapSampler", ResourceKind.Sampler, ShaderStages.Fragment)
+                new ResourceLayoutElementDescription("ClipMapSampler", ResourceKind.Sampler, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("Filters", ResourceKind.UniformBuffer, ShaderStages.Fragment)
                 ));
             
             _fragLayoutClip = Factory.CreateResourceLayout(new ResourceLayoutDescription
@@ -594,19 +597,30 @@ namespace Phi.Viewer.Graphics
             DrawTexture(_renderColorResolved, 0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
             CommandList.PopDebugGroup();
         }
+
+        private DeviceBuffer CreateFilterBuffer()
+        {
+            var factory = Factory;
+            var buffer = factory.CreateBuffer(new BufferDescription(16, BufferUsage.UniformBuffer));
+            GraphicsDevice.UpdateBuffer(buffer, 0, _filters.Count == 0 ? new FilterDescription() : _filters.Peek());
+            return buffer;
+        }
         
         public void DrawTexture(TextureView view, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
             CommandList.PushDebugGroup("DrawTextureView");
             var factory = Factory;
+            
             var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
             tintInfoBuffer.Name = "Texture TintInfo Uniform Buffer";
             GraphicsDevice.UpdateBuffer(
                 tintInfoBuffer, 0,
                 tintInfo ?? new TintInfo(new Vector3(1f, 1f, 1f), 0f, 1f));
 
+            var filtersBuffer = CreateFilterBuffer();
             var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
-                _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, _clipStack[_clipLevel].Texture, GraphicsDevice.LinearSampler));
+                _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, 
+                _clipStack[_clipLevel].Texture, GraphicsDevice.LinearSampler, filtersBuffer));
             resourceSet.Name = "Texture Fragment Resource Set";
             CommandList.SetGraphicsResourceSet(1, resourceSet);
             
@@ -640,9 +654,11 @@ namespace Phi.Viewer.Graphics
             ResourceSet resourceSet;
             if (!_isClipping)
             {
+                var filtersBuffer = CreateFilterBuffer();
                 resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
-                    _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, _clipStack[_clipLevel].Texture,
-                    GraphicsDevice.LinearSampler));
+                    _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, 
+                    _clipStack[_clipLevel].Texture,
+                    GraphicsDevice.LinearSampler, filtersBuffer));
                 resourceSet.Name = "Solid Color Fragment Resource Set";
                 CommandList.SetGraphicsResourceSet(1, resourceSet);
             }
@@ -1041,7 +1057,22 @@ namespace Phi.Viewer.Graphics
             FT_Get_Kerning(_fontFace, left, right, 0, out var vec);
             return new Vector2(vec.x.ToInt64() / 64f, vec.y.ToInt64() / 64f);
         }
-        
+
+        public void PushFilter(FilterDescription filters)
+        {
+            _filters.Push(filters);
+        }
+
+        public FilterDescription CopyCurrentFilter()
+        {
+            return _filters.Peek();
+        }
+
+        public FilterDescription PopFilter()
+        {
+            return _filters.Pop();
+        }
+
         public void DrawText(string text, Color color, float fontSize, float x, float y)
         {
             if (_ft == null) return;
@@ -1086,6 +1117,11 @@ namespace Phi.Viewer.Graphics
             TintFactor = tintFactor;
             FinalAlpha = finalAlpha;
         }
+    }
+
+    public struct FilterDescription
+    {
+        public float BlurRadius;
     }
 
     public struct MatrixInfo
