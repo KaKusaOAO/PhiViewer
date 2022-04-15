@@ -2,7 +2,6 @@
 using Phi.Resources;
 using Phi.Viewer.Utils;
 using Veldrid;
-using Veldrid.Utilities;
 
 namespace Phi.Viewer.View
 {

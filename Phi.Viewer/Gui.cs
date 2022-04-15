@@ -1,33 +1,39 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using ImGuiNET;
+using KaLib.Utils;
 using ManagedBass;
+using Newtonsoft.Json;
+using Phi.Charting;
 using Phi.Charting.Events;
 using Phi.Charting.Notes;
-using Phi.Viewer.Audio;
 using Phi.Viewer.Graphics;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Phi.Viewer
 {
     public class Gui
     {
-        private PhiViewer viewer;
-
-        private BetterImGuiRenderer renderer;
-
+        private PhiViewer _viewer;
+        private BetterImGuiRenderer _renderer;
         private Stopwatch _stopwatch = new Stopwatch();
+        private List<ChartEntry> _charts = new List<ChartEntry>();
+        private bool _loadingChart = false;
 
         public Gui(PhiViewer viewer)
         {
-            this.viewer = viewer;
+            this._viewer = viewer;
             var window = viewer.Host.Window;
-            renderer = new BetterImGuiRenderer(window.GraphicsDevice,
+            _renderer = new BetterImGuiRenderer(window.GraphicsDevice,
                 window.GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription,
                 (int) window.Width, (int) window.Height);
 
@@ -38,6 +44,16 @@ namespace Phi.Viewer
             ImGui.LoadIniSettingsFromDisk("imgui.ini");
 
             _stopwatch.Start();
+            LoadChartTable();
+        }
+
+        private void LoadChartTable()
+        {
+            _charts.Clear();
+
+            _charts.AddRange(
+                JsonSerializer.Deserialize<List<ChartEntry>>(
+                    File.ReadAllText(@"D:\AppServ\www\phigros\assets\charts\db.json")) ?? new List<ChartEntry>());
         }
 
         public void Update(InputSnapshot snapshot)
@@ -45,9 +61,9 @@ namespace Phi.Viewer
             var delta = _stopwatch.Elapsed.TotalSeconds;
             _stopwatch.Restart();
 
-            var window = viewer.Host.Window;
-            renderer.WindowResized((int) window.Width, (int) window.Height);
-            renderer.EnhancedUpdate((float) delta, snapshot);
+            var window = _viewer.Host.Window;
+            _renderer.WindowResized((int) window.Width, (int) window.Height);
+            _renderer.EnhancedUpdate((float) delta, snapshot);
         }
 
         private object _inspectingObject = null;
@@ -60,7 +76,7 @@ namespace Phi.Viewer
                 {
                     if (ImGui.MenuItem("Sort Notes by Time"))
                     {
-                        foreach (var line in viewer.Chart.JudgeLines)
+                        foreach (var line in _viewer.Chart.JudgeLines)
                         {
                             line.NotesAbove.Sort((a, b) => (int) (a.Model.Time - b.Model.Time));
                             line.NotesBelow.Sort((a, b) => (int) (a.Model.Time - b.Model.Time));
@@ -105,18 +121,18 @@ namespace Phi.Viewer
                         ImGui.TableNextRow();
                         ImGui.TableNextColumn();
 
-                        var chartOpen = ImGui.TreeNodeEx($"{viewer.Chart.GetHashCode()}",
-                            _inspectingObject == viewer.Chart ? ImGuiTreeNodeFlags.Selected : ImGuiTreeNodeFlags.None,
+                        var chartOpen = ImGui.TreeNodeEx($"{_viewer.Chart.GetHashCode()}",
+                            _inspectingObject == _viewer.Chart ? ImGuiTreeNodeFlags.Selected : ImGuiTreeNodeFlags.None,
                             "Chart");
 
                         if (ImGui.IsItemClicked() && ImGui.IsKeyDown(ImGuiKey.ModShift))
                         {
-                            _inspectingObject = viewer.Chart;
+                            _inspectingObject = _viewer.Chart;
                         }
 
                         if (chartOpen)
                         {
-                            foreach (var line in viewer.Chart.JudgeLines)
+                            foreach (var line in _viewer.Chart.JudgeLines)
                             {
                                 ImGui.TableNextRow();
                                 ImGui.TableNextColumn();
@@ -223,7 +239,7 @@ namespace Phi.Viewer
 
                         if (ImGui.IsMouseReleased(ImGuiMouseButton.Left))
                         {
-                            viewer.Chart.Model.ResolveSiblings();
+                            _viewer.Chart.Model.ResolveSiblings();
                         }
 
                         ImGui.BeginDisabled(!(note is HoldNoteView));
@@ -309,15 +325,15 @@ namespace Phi.Viewer
 
         private void DisplayViewerContent()
         {
-            var r = viewer.Renderer;
+            var r = _viewer.Renderer;
             var tex = r.ResolvedRenderTargetTexture;
-            var img = renderer.GetOrCreateImGuiBinding(r.Factory, tex);
+            var img = _renderer.GetOrCreateImGuiBinding(r.Factory, tex);
 
             var size = new Vector2(
                 ImGui.GetWindowWidth(),
                 (float)tex.Height / tex.Width * ImGui.GetWindowWidth()
             );
-            var maxHeight = ImGui.GetWindowHeight() - ImGui.GetFrameHeight();
+            var maxHeight = ImGui.GetWindowHeight() - ImGui.GetFrameHeight() * 1.5f;
             if (size.Y > maxHeight)
             {
                 size /= size.Y / maxHeight;
@@ -334,101 +350,140 @@ namespace Phi.Viewer
         private void DisplayControlContent()
         {
 
-            var p = viewer.PlaybackTime;
+            var p = _viewer.PlaybackTime;
             ImGui.PushItemWidth(ImGui.GetWindowWidth() - 20);
             ImGui.PushID("playback_time");
-            ImGui.SliderFloat("", ref p, 0, viewer.MusicPlayer.Duration);
+            ImGui.SliderFloat("", ref p, 0, _viewer.MusicPlayer.Duration);
             if (ImGui.IsItemEdited())
             {
-                viewer.MusicPlayer.Seek(p);
-                viewer.PlaybackTime = p;
+                _viewer.MusicPlayer.Seek(p);
+                _viewer.PlaybackTime = p;
             }
             ImGui.PopID();
             ImGui.PopItemWidth();
 
-            if (ImGui.Button(viewer.IsPlaying ? "Pause" : "Play"))
+            if (ImGui.Button(_viewer.IsPlaying ? "Pause" : "Play"))
             {
-                viewer.IsPlaying = !viewer.IsPlaying;
-                if (viewer.IsPlaying)
+                _viewer.IsPlaying = !_viewer.IsPlaying;
+                if (_viewer.IsPlaying)
                 {
-                    viewer.MusicPlayer.Play(viewer.MusicPlayer.PlaybackTime);
+                    _viewer.MusicPlayer.Play(_viewer.MusicPlayer.PlaybackTime);
                 }
                 else
                 {
-                    viewer.MusicPlayer.Stop();
+                    _viewer.MusicPlayer.Stop();
                 }
             }
 
             ImGui.SameLine();
             if (ImGui.Button("Stop"))
             {
-                viewer.IsPlaying = false;
-                viewer.MusicPlayer.Stop();
-                viewer.MusicPlayer.Seek(0);
-                viewer.PlaybackTime = 0;
+                _viewer.IsPlaying = false;
+                _viewer.MusicPlayer.Stop();
+                _viewer.MusicPlayer.Seek(0);
+                _viewer.PlaybackTime = 0;
             }
             
             ImGui.SameLine();
-            var bl = viewer.IsLoopEnabled;
+            var bl = _viewer.IsLoopEnabled;
             ImGui.Checkbox("Loop", ref bl);
-            viewer.IsLoopEnabled = bl;
+            _viewer.IsLoopEnabled = bl;
             
             ImGui.SameLine();
-            p = viewer.MusicPlayer.Volume;
+            p = _viewer.MusicPlayer.Volume;
             ImGui.PushID("playback_vol");
             ImGui.PushItemWidth(100);
             ImGui.SliderFloat("Volume", ref p, 0, 1);
             ImGui.PopItemWidth();
             if (ImGui.IsItemEdited())
             {
-                viewer.MusicPlayer.Volume = p;
+                _viewer.MusicPlayer.Volume = p;
             }
             ImGui.PopID();
 
             if (ImGui.CollapsingHeader("Charts"))
             {
+                if (ImGui.Button("Reload"))
+                {
+                    LoadChartTable();
+                }
+                
                 if (ImGui.BeginTable("_chartList", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders))
                 {
                     ImGui.TableSetupColumn("Title");
                     ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 100);
                     ImGui.TableHeadersRow();
 
-                    ImGui.TableNextRow();
-                    ImGui.TableNextColumn();
-                    ImGui.BeginGroup();
-                    ImGui.Dummy(new Vector2(0, 0));
-                    ImGui.Text("Rrhar'il");
-                    ImGui.Dummy(new Vector2(0, 0));
-                    ImGui.EndGroup();
-                    ImGui.SameLine();
-                    
-                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1f, 1f, 1f, 0.5f));
-                    ImGui.BeginDisabled(true);
-                    ImGui.Button("AT Lv.16");
-                    ImGui.EndDisabled();
-                    ImGui.PopStyleColor(1);
-                    
-                    ImGui.TableNextColumn();
-                    if (ImGui.Button("Load"))
+                    foreach (var entry in _charts)
                     {
-                        var pathBase = @"D:\AppServ\www\phigros\assets\charts\";
-                        viewer.Chart = new ChartView(Charting.Chart.Deserialize(
-                            File.ReadAllText(@$"{pathBase}rrhar\3.json")));
-
-                        viewer.Background?.Dispose();
-                        viewer.Background = ImageLoader.LoadTextureFromPath(@$"{pathBase}rrhar\bg.png");
-
-                        viewer.MusicPlayer.Stop();
-                        viewer.MusicPlayer.Seek(0);
-                        viewer.IsPlaying = false;
-                        viewer.PlaybackTime = 0;
+                        ImGui.TableNextRow();
+                        ImGui.TableNextColumn();
+                        ImGui.BeginGroup();
+                        ImGui.Dummy(new Vector2(0, 0));
+                        ImGui.Text(entry.Name + (entry.IsLegacy ? " (Legacy)" : ""));
+                        ImGui.Dummy(new Vector2(0, 0));
+                        ImGui.EndGroup();
+                        ImGui.SameLine();
+                        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1f, 1f, 1f, 0.5f));
+                        ImGui.BeginDisabled(true);
+                        var lvl = entry.Difficulty.Level < 0 ? "?" : $"{entry.Difficulty.Level}";
+                        ImGui.Button($"{entry.Difficulty.Type} Lv.{lvl}");
+                        ImGui.EndDisabled();
+                        ImGui.PopStyleColor(1);
                         
-                        viewer.MusicPlayer.Dispose();
-                        viewer.MusicPlayer.LoadFromPath(@$"{pathBase}rrhar\base.wav");
+                        ImGui.TableNextColumn();
+                        ImGui.PushID(entry.GetHashCode());
+                        ImGui.BeginDisabled(_loadingChart);
+                        if (ImGui.Button("Load"))
+                        {
+                            _loadingChart = true;
+                            Task.Run(async () =>
+                            {
+                                var pathBase = @"D:\AppServ\www\phigros\";
+                                Console.WriteLine("Loading from " + @$"{pathBase}{entry.ChartPath}");
+                                try
+                                {
+                                    Logger.Verbose(@$"Loading chart from {pathBase}{entry.ChartPath}");
+                                    await using var stream = new FileStream(@$"{pathBase}{entry.ChartPath}", FileMode.Open);
+                                    Logger.Verbose("Deserializing JSON...");
+                                    var model = Chart.Deserialize(stream);
+                                    Logger.Verbose("Processing deserialized chart model...");
+                                    var chart = await ChartView.CreateFromModelAsync(model);
+                                    Logger.Verbose("Done!");
 
-                        viewer.SongTitle = "Rrhar'il";
-                        viewer.DiffName = "AT";
-                        viewer.DiffLevel = 16;
+                                    _viewer.ActionQueue.Enqueue(() =>
+                                    {
+                                        _viewer.Chart = chart;
+
+                                        _viewer.Background?.Dispose();
+                                        _viewer.Background =
+                                            ImageLoader.LoadTextureFromPath(@$"{pathBase}{entry.BackgroundPath}");
+
+                                        _viewer.MusicPlayer.Stop();
+                                        _viewer.MusicPlayer.Seek(0);
+                                        _viewer.IsPlaying = false;
+                                        _viewer.PlaybackTime = 0;
+
+                                        _viewer.MusicPlayer.Dispose();
+                                        _viewer.MusicPlayer.LoadFromPath(@$"{pathBase}{entry.AudioPath}");
+
+                                        _viewer.SongTitle = entry.Name;
+                                        _viewer.DiffName = entry.Difficulty.Type.ToString();
+                                        _viewer.DiffLevel = entry.Difficulty.Level;
+
+                                        GC.Collect();
+                                        _loadingChart = false;
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Failed! {ex}");
+                                    _loadingChart = false;
+                                }
+                            });
+                        }
+                        ImGui.EndDisabled();
+                        ImGui.PopID();
                     }
                     
                     ImGui.EndTable();
@@ -492,7 +547,7 @@ namespace Phi.Viewer
 
                     var x = ImGui.GetCursorPosX();
                     var y = ImGui.GetCursorPosY();
-                    var timelineLength = viewer.MusicPlayer.Duration;
+                    var timelineLength = _viewer.MusicPlayer.Duration;
                     var u = (ImGui.GetWindowWidth() - ImGui.GetCursorPosX()) / timelineLength * _timelineScale;
                     var div = 1500;
                     if (_timelineScale >= 7) div = 1000;
@@ -507,9 +562,9 @@ namespace Phi.Viewer
                         ImGui.Text($"{i}");
                     }
 
-                    if (viewer.Chart != null)
+                    if (_viewer.Chart != null)
                     {
-                        foreach (var line in viewer.Chart.JudgeLines)
+                        foreach (var line in _viewer.Chart.JudgeLines)
                         {
                             ImGui.TableNextRow();
                             ImGui.TableNextColumn();
@@ -608,16 +663,16 @@ namespace Phi.Viewer
                     }
 
                     var scrollX = ImGui.GetScrollX();
-                    if (_animScrollLock && viewer.IsPlaying)
+                    if (_animScrollLock && _viewer.IsPlaying)
                     {
                         scrollX = Math.Min((ImGui.GetWindowWidth() - ImGui.GetCursorPosX()) * (_timelineScale - 1),
-                            Math.Max(0, viewer.PlaybackTime * u - 50));
+                            Math.Max(0, _viewer.PlaybackTime * u - 50));
                         ImGui.SetScrollX(scrollX);
                     }
 
                     var drawList = ImGui.GetWindowDrawList();
                     var trackX = ImGui.GetWindowPos().X - scrollX + ImGui.GetCursorPosX() +
-                                 viewer.PlaybackTime * u;
+                                 _viewer.PlaybackTime * u;
                     var trackY = ImGui.GetWindowPos().Y + 57;
                     drawList.AddRectFilled(new Vector2(trackX, trackY),
                         new Vector2(trackX + 1, ImGui.GetWindowPos().Y + ImGui.GetWindowHeight()),
@@ -629,7 +684,7 @@ namespace Phi.Viewer
                             ImGui.GetWindowPos().Y + ImGui.GetWindowHeight() + 20),
                         false);
                     trackX = ImGui.GetWindowPos().X +
-                             viewer.PlaybackTime / timelineLength * (ImGui.GetWindowWidth() - 20);
+                             _viewer.PlaybackTime / timelineLength * (ImGui.GetWindowWidth() - 20);
                     trackY = ImGui.GetWindowPos().Y + ImGui.GetWindowHeight() - 12;
                     drawList.AddRectFilled(new Vector2(trackX, trackY),
                         new Vector2(trackX + 1, ImGui.GetWindowPos().Y + ImGui.GetWindowHeight()),
@@ -703,7 +758,7 @@ namespace Phi.Viewer
 
             if (ImGui.CollapsingHeader("Renderer"))
             {
-                var m = viewer.Renderer.Metrics;
+                var m = _viewer.Renderer.Metrics;
                 
                 if (ImGui.BeginTable("_rendererMetrics", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
                 {
@@ -737,7 +792,7 @@ namespace Phi.Viewer
             
             if (ImGui.CollapsingHeader("Chart"))
             {
-                var c = viewer.Chart;
+                var c = _viewer.Chart;
 
                 if (ImGui.BeginTable("_chartMetrics", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
                 {
@@ -766,7 +821,7 @@ namespace Phi.Viewer
             
             if (ImGui.CollapsingHeader("Viewer"))
             {
-                var v = viewer;
+                var v = _viewer;
 
                 if (ImGui.Button("Spawn Judge Effect Particle"))
                 {
@@ -814,13 +869,13 @@ namespace Phi.Viewer
             
             if (ImGui.CollapsingHeader("Graphics"))
             {
-                var bl = viewer.ForceRenderOffscreen;
+                var bl = _viewer.ForceRenderOffscreen;
                 ImGui.Checkbox("Force Render Offscreen", ref bl);
-                viewer.ForceRenderOffscreen = bl;
+                _viewer.ForceRenderOffscreen = bl;
 
-                bl = viewer.UseUniqueSpeed;
+                bl = _viewer.UseUniqueSpeed;
                 ImGui.Checkbox("Use Unique Speed", ref bl);
-                viewer.UseUniqueSpeed = bl;
+                _viewer.UseUniqueSpeed = bl;
                 
                 ImGui.SameLine();
                 ImGui.TextColored(new Vector4(1, 1, 1, 0.5f), "(?)");
@@ -829,9 +884,9 @@ namespace Phi.Viewer
                     ImGui.SetTooltip("If enabled, speed events won't take affect.");
                 }
                 
-                bl = viewer.DisableGlobalClip;
+                bl = _viewer.DisableGlobalClip;
                 ImGui.Checkbox("Disable Global Clip", ref bl);
-                viewer.DisableGlobalClip = bl;
+                _viewer.DisableGlobalClip = bl;
 
                 ImGui.SameLine();
                 ImGui.TextColored(new Vector4(1, 1, 1, 0.5f), "(?)");
@@ -840,90 +895,90 @@ namespace Phi.Viewer
                     ImGui.SetTooltip("If enabled, you will see notes and lines outside of the screen range.");
                 }
                 
-                var vec2 = viewer.CanvasTranslate;
+                var vec2 = _viewer.CanvasTranslate;
                 ImGui.DragFloat2("Canvas Translate", ref vec2);
-                viewer.CanvasTranslate = vec2;
+                _viewer.CanvasTranslate = vec2;
 
-                var p = viewer.CanvasScale;
+                var p = _viewer.CanvasScale;
                 ImGui.SliderFloat("Canvas Scale", ref p, 0.5f, 2f);
-                viewer.CanvasScale = p;
+                _viewer.CanvasScale = p;
 
                 if (ImGui.Button("Reset Translate"))
                 {
-                    viewer.CanvasTranslate = Vector2.Zero;
+                    _viewer.CanvasTranslate = Vector2.Zero;
                 }
 
                 ImGui.SameLine();
 
                 if (ImGui.Button("Reset Scale"))
                 {
-                    viewer.CanvasScale = 1;
+                    _viewer.CanvasScale = 1;
                 }
                 
-                bl = viewer.EnableParticles;
+                bl = _viewer.EnableParticles;
                 ImGui.Checkbox("Enable Click Particle", ref bl);
-                viewer.EnableParticles = bl;
+                _viewer.EnableParticles = bl;
             }
 
             if (ImGui.CollapsingHeader("Audio"))
             {
-                var p = viewer.MusicPlayer.PlaybackRate;
+                var p = _viewer.MusicPlayer.PlaybackRate;
                 ImGui.SliderFloat("Playback Rate", ref p, 0.5f, 2f);
                 if (ImGui.IsItemEdited())
                 {
-                    viewer.MusicPlayer.PlaybackRate = p;
+                    _viewer.MusicPlayer.PlaybackRate = p;
                 }
 
-                var i = (int) viewer.MusicPlayer.PlaybackPitch;
+                var i = (int) _viewer.MusicPlayer.PlaybackPitch;
                 ImGui.SliderInt("Playback Pitch (int)", ref i, -12, 12);
                 if (ImGui.IsItemEdited())
                 {
-                    viewer.MusicPlayer.PlaybackPitch = i;
+                    _viewer.MusicPlayer.PlaybackPitch = i;
                 }
 
-                p = viewer.MusicPlayer.PlaybackPitch;
+                p = _viewer.MusicPlayer.PlaybackPitch;
                 ImGui.SliderFloat("Playback Pitch (float)", ref p, -12, 12);
                 if (ImGui.IsItemEdited())
                 {
-                    viewer.MusicPlayer.PlaybackPitch = p;
+                    _viewer.MusicPlayer.PlaybackPitch = p;
                 }
 
                 if (ImGui.Button("Reset Rate"))
                 {
-                    viewer.MusicPlayer.PlaybackRate = 1;
+                    _viewer.MusicPlayer.PlaybackRate = 1;
                 }
 
                 ImGui.SameLine();
 
                 if (ImGui.Button("Reset Pitch"))
                 {
-                    viewer.MusicPlayer.PlaybackPitch = 0;
+                    _viewer.MusicPlayer.PlaybackPitch = 0;
                 }
 
                 ImGui.SameLine();
 
-                var bl = viewer.MusicPlayer.SyncSpeedAndPitch;
+                var bl = _viewer.MusicPlayer.SyncSpeedAndPitch;
                 ImGui.Checkbox("Sync Speed & Pitch", ref bl);
-                viewer.MusicPlayer.SyncSpeedAndPitch = bl;
+                _viewer.MusicPlayer.SyncSpeedAndPitch = bl;
                 
-                bl = viewer.EnableClickSound;
+                bl = _viewer.EnableClickSound;
                 ImGui.Checkbox("Enable Click FX", ref bl);
-                viewer.EnableClickSound = bl;
+                _viewer.EnableClickSound = bl;
             }
 
             if (ImGui.CollapsingHeader("Viewer"))
             {
-                var str = viewer.SongTitle ?? "<null>";
+                var str = _viewer.SongTitle ?? "<null>";
                 ImGui.InputText("Song Title", ref str, 256);
-                viewer.SongTitle = str;
+                _viewer.SongTitle = str;
                 
-                str = viewer.DiffName ?? "<null>";
+                str = _viewer.DiffName ?? "<null>";
                 ImGui.InputText("Difficulty Name", ref str, 64);
-                viewer.DiffName = str;
+                _viewer.DiffName = str;
 
-                var i = viewer.DiffLevel;
+                var i = _viewer.DiffLevel;
                 ImGui.SliderInt("Difficulty", ref i, -1, 32);
-                viewer.DiffLevel = i;
+                _viewer.DiffLevel = i;
             }
             
             ImGui.PopItemWidth();
@@ -985,7 +1040,40 @@ namespace Phi.Viewer
             }
             
             ImGui.ShowDemoWindow();
-            renderer.Render(device, list);
+            _renderer.Render(device, list);
+        }
+
+        private struct ChartEntry
+        {
+            public struct DifficultyDescriptor
+            {
+                [JsonPropertyName("type")]
+                public ChartDifficulty Type { get; set; }
+                
+                [JsonPropertyName("level")]
+                public int Level { get; set; }
+            }
+            
+            [JsonPropertyName("name")]
+            public string Name { get; set; }
+            
+            [JsonPropertyName("difficulty")]
+            public DifficultyDescriptor Difficulty { get; set; }
+            
+            [JsonPropertyName("audio")]
+            public string AudioPath { get; set; }
+            
+            [JsonPropertyName("chart")]
+            public string ChartPath { get; set; }
+            
+            [JsonPropertyName("bg")]
+            public string BackgroundPath { get; set; }
+            
+            [JsonPropertyName("legacy")]
+            public bool IsLegacy { get; set; }
+            
+            [JsonPropertyName("Source")]
+            public string Source { get; set; }
         }
     }
 }

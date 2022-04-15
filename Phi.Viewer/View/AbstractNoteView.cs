@@ -3,8 +3,6 @@ using System.IO;
 using System.Numerics;
 using Phi.Charting.Notes;
 using Phi.Resources;
-using Phi.Viewer.Audio;
-using Veldrid;
 
 namespace Phi.Viewer.View
 {

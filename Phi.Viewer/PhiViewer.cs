@@ -6,15 +6,13 @@ using System.Drawing;
 using System.IO;
 using System.Numerics;
 using System.Timers;
+using KaLib.Utils;
 using ManagedBass;
-using Phi.Charting;
-using Phi.Resources;
 using Phi.Viewer.Audio;
 using Phi.Viewer.Graphics;
 using Phi.Viewer.Utils;
 using Phi.Viewer.View;
 using Veldrid;
-using Color = System.Drawing.Color;
 
 namespace Phi.Viewer
 {
@@ -120,6 +118,8 @@ namespace Phi.Viewer
             }   
         }
 
+        public ConcurrentQueue<Action> ActionQueue { get; } = new ConcurrentQueue<Action>();
+
         public PhiViewer()
         {
             Instance = this;
@@ -131,13 +131,14 @@ namespace Phi.Viewer
         
         public void Init()
         {
+            Logger.Level = LogLevel.Verbose;
             Renderer = new Renderer(this);
             Gui = new Gui(this);
 
             Bass.GlobalStreamVolume = 3000;
-            
-            Chart = new ChartView(Charting.Chart.Deserialize(
-                File.ReadAllText(@"rrhar/3.json")));
+
+            using var stream = new FileStream(@"rrhar/3.json", FileMode.Open);
+            Chart = new ChartView(Charting.Chart.Deserialize(stream));
 
             Background = ImageLoader.LoadTextureFromPath(@"rrhar/bg.png");
 
@@ -206,6 +207,11 @@ namespace Phi.Viewer
             {
                 var smooth = MathF.Max(0, MathF.Min(1, DeltaTime / SeekSmoothness));
                 Time = M.Lerp(Time, PlaybackTime, smooth);
+            }
+
+            while (ActionQueue.TryDequeue(out var action))
+            {
+                action();
             }
         }
 

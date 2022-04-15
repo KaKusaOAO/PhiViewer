@@ -10,9 +10,6 @@ using Phi.Resources;
 using Veldrid;
 using Veldrid.SPIRV;
 using Veldrid.Utilities;
-using Color = System.Drawing.Color;
-using ResourceSet = Veldrid.ResourceSet;
-
 using static FreeTypeSharp.Native.FT;
 
 namespace Phi.Viewer.Graphics

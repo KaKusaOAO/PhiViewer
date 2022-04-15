@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
+using System.Timers;
 using ManagedBass;
 using ManagedBass.Fx;
-using Timer = System.Timers.Timer;
 
 namespace Phi.Viewer.Audio
 {

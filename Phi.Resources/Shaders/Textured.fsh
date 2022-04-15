@@ -51,7 +51,10 @@ vec4 blur(vec4 fragColor) {
     {
         for(float i=1.0/Quality; i<=1.0; i+=1.0/Quality)
         {
-            Color += texture(sampler2D(Input, Sampler), uv+vec2(cos(d),sin(d))*Radius*i);
+            vec2 blurUv = uv + vec2(cos(d), sin(d)) * Radius * i;
+            blurUv.x = min(max(blurUv.x, 0), 1);
+            blurUv.y = min(max(blurUv.y, 0), 1);
+            Color += texture(sampler2D(Input, Sampler), blurUv);
         }
     }
 
