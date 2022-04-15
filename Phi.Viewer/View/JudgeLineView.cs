@@ -69,7 +69,7 @@ namespace Phi.Viewer.View
             if (ev == null) return 0;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
-            return M.Lerp(ev.Start, ev.End, progress);
+            return MathF.Max(0, MathF.Min(1, M.Lerp(ev.Start, ev.End, progress)));
         }
 
         public float GetSpeed(float time)

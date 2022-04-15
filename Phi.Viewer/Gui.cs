@@ -341,8 +341,9 @@ namespace Phi.Viewer
 
             var padX = (ImGui.GetWindowWidth() - size.X) / 2;
             var padY = (ImGui.GetWindowHeight() + ImGui.GetFrameHeight() - size.Y) / 2;
-            var uv0 = new Vector2(0, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? 1 : 0);
-            var uv1 = new Vector2(1, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? 0 : 1);
+            var (l ,h) = (0.001f, 0.999f);
+            var uv0 = new Vector2(l, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? h : l);
+            var uv1 = new Vector2(h, r.GraphicsDevice.BackendType == GraphicsBackend.OpenGL ? l : h);
             ImGui.SetCursorPos(new Vector2(padX, padY));
             ImGui.Image(img, size, uv0, uv1);
         }
@@ -432,7 +433,7 @@ namespace Phi.Viewer
                         ImGui.PopStyleColor(1);
                         
                         ImGui.TableNextColumn();
-                        ImGui.PushID(entry.GetHashCode());
+                        ImGui.PushID(entry.GetHashCode() + (entry.IsLegacy ? "L" : "M"));
                         ImGui.BeginDisabled(_loadingChart);
                         if (ImGui.Button("Load"))
                         {
@@ -440,7 +441,6 @@ namespace Phi.Viewer
                             Task.Run(async () =>
                             {
                                 var pathBase = @"D:\AppServ\www\phigros\";
-                                Console.WriteLine("Loading from " + @$"{pathBase}{entry.ChartPath}");
                                 try
                                 {
                                     Logger.Verbose(@$"Loading chart from {pathBase}{entry.ChartPath}");
@@ -477,7 +477,7 @@ namespace Phi.Viewer
                                 }
                                 catch (Exception ex)
                                 {
-                                    Console.WriteLine($"Failed! {ex}");
+                                    Logger.Error($"Failed! {ex}");
                                     _loadingChart = false;
                                 }
                             });
@@ -929,6 +929,16 @@ namespace Phi.Viewer
                     _viewer.MusicPlayer.PlaybackRate = p;
                 }
 
+                if (_viewer.Chart.JudgeLines.Any())
+                {
+                    p = _viewer.MusicPlayer.PlaybackRate * _viewer.Chart.JudgeLines[0].Model.Bpm;
+                    ImGui.DragFloat("Playback Rate (BPM)", ref p, 0.5f, 20, 512);
+                    if (ImGui.IsItemEdited())
+                    {
+                        _viewer.MusicPlayer.PlaybackRate = p / _viewer.Chart.JudgeLines[0].Model.Bpm;
+                    }
+                }
+
                 var i = (int) _viewer.MusicPlayer.PlaybackPitch;
                 ImGui.SliderInt("Playback Pitch (int)", ref i, -12, 12);
                 if (ImGui.IsItemEdited())
@@ -979,6 +989,14 @@ namespace Phi.Viewer
                 var i = _viewer.DiffLevel;
                 ImGui.SliderInt("Difficulty", ref i, -1, 32);
                 _viewer.DiffLevel = i;
+
+                var p = _viewer.MaxRatio;
+                ImGui.SliderFloat("Playfield Max Aspect", ref p, 0.5f, 2f);
+                _viewer.MaxRatio = p;
+
+                if (ImGui.Button("4:3")) _viewer.MaxRatio = 4f / 3f;
+                ImGui.SameLine();
+                if (ImGui.Button("16:9")) _viewer.MaxRatio = 16f / 9f;
             }
             
             ImGui.PopItemWidth();

@@ -49,6 +49,8 @@ namespace Phi.Viewer
         public float CurrentAspect => WindowSize.Width / WindowSize.Height;
         
         public float RenderXPad => CurrentAspect > MaxRatio ? (WindowSize.Width - (WindowSize.Height * MaxRatio)) / 2 : 0;
+
+        public float CurrentPlayfieldAspect => (WindowSize.Width - RenderXPad * 2) / WindowSize.Height;
         
         public float Ratio { get; set; } = 1;
         
@@ -109,9 +111,9 @@ namespace Phi.Viewer
                 var refAspect = 16f / 9f;
                 var mult = 1f;
 
-                if (CurrentAspect < refAspect)
+                if (CurrentPlayfieldAspect < refAspect)
                 {
-                    mult = M.Lerp(1, CurrentAspect / refAspect, 0.8f);
+                    mult = M.Lerp(1, CurrentPlayfieldAspect / refAspect, 0.8f);
                 }
 
                 return Ratio * mult;
@@ -283,6 +285,7 @@ namespace Phi.Viewer
             Renderer.DrawTexture(Background, 0, 0, WindowSize.Width, WindowSize.Height, new TintInfo(Vector3.One, 0, 0.4f));
             
             Renderer.PushClip();
+            Renderer.ClipRect(pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
 
             var iw = Background.Width;
             var ih = Background.Height;
@@ -292,9 +295,11 @@ namespace Phi.Viewer
             {
                 BlurRadius = 20
             });
-            Renderer.DrawTexture(Background, pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
+            Renderer.DrawTexture(Background, pad + xOffset / 2, 0, 
+                (float)iw / ih * WindowSize.Height, WindowSize.Height);
             Renderer.PopFilter();
-            Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
+            Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), 
+                pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             
             Renderer.PopClip();
         }
@@ -411,9 +416,9 @@ namespace Phi.Viewer
             if (combo >= 3)
             {
                 size = Renderer.MeasureText("COMBO", 22 * ratio);
-                Renderer.DrawText("COMBO", Color.White, 22 * ratio, (cw - size.Width) / 2, 87 * ratio);
+                Renderer.DrawText("COMBO", Color.White, 22 * ratio, (cw - size.Width) / 2 + pad, 87 * ratio);
                 size = Renderer.MeasureText($"{combo}", 58 * ratio);
-                Renderer.DrawText($"{combo}", Color.White, 58 * ratio, (cw - size.Width) / 2, 60 * ratio);
+                Renderer.DrawText($"{combo}", Color.White, 58 * ratio, (cw - size.Width) / 2 + pad, 60 * ratio);
             }
             
             // -- Score

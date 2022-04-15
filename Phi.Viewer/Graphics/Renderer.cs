@@ -728,7 +728,7 @@ namespace Phi.Viewer.Graphics
 
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
             var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
-            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections, thickness, counterClockwise);
+            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections / 4, thickness, counterClockwise);
             CommandList.PopDebugGroup();
         }
         
@@ -801,7 +801,7 @@ namespace Phi.Viewer.Graphics
 
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
             var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
-            DrawSector(color, x, y, radius, startRadians, endRadians, sections, counterClockwise);
+            DrawSector(color, x, y, radius, startRadians, endRadians, sections / 2, counterClockwise);
             CommandList.PopDebugGroup();
         }
         
