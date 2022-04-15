@@ -90,7 +90,7 @@ namespace Phi.Viewer.Graphics
         private IntPtr _memFont = IntPtr.Zero;
 
         private uint _fontSize = 70;
-        private uint _fontTexPad = 1;
+        private uint _fontTexPad = 5;
         private uint _fontRes = 300;
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
         

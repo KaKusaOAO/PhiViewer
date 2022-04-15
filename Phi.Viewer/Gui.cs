@@ -50,10 +50,6 @@ namespace Phi.Viewer
         private void LoadChartTable()
         {
             _charts.Clear();
-
-            _charts.AddRange(
-                JsonSerializer.Deserialize<List<ChartEntry>>(
-                    File.ReadAllText(@"D:\AppServ\www\phigros\assets\charts\db.json")) ?? new List<ChartEntry>());
         }
 
         public void Update(InputSnapshot snapshot)
