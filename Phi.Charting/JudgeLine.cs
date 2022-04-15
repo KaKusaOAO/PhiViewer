@@ -54,8 +54,8 @@ namespace Phi.Charting
                 var endY = MathF.Round(ev.End % 1000);
 
                 ev.Start = startX / xCenter / 2;
-                ev.Start2 = startY / xCenter / 2;
-                ev.End = endX / yCenter / 2;
+                ev.Start2 = startY / yCenter / 2;
+                ev.End = endX / xCenter / 2;
                 ev.End2 = endY / yCenter / 2;
             }
         }
