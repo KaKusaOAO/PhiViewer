@@ -401,93 +401,93 @@ namespace Phi.Viewer
                 _viewer.MusicPlayer.Volume = p;
             }
             ImGui.PopID();
+        }
 
-            if (ImGui.CollapsingHeader("Charts"))
+        private void DisplayChartTableContent()
+        {
+            if (ImGui.Button("Reload"))
             {
-                if (ImGui.Button("Reload"))
+                LoadChartTable();
+            }
+            
+            if (ImGui.BeginTable("_chartList", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders))
+            {
+                ImGui.TableSetupColumn("Title");
+                ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 100);
+                ImGui.TableHeadersRow();
+
+                foreach (var entry in _charts)
                 {
-                    LoadChartTable();
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.BeginGroup();
+                    ImGui.Dummy(new Vector2(0, 0));
+                    ImGui.Text(entry.Name + (entry.IsLegacy ? " (Legacy)" : ""));
+                    ImGui.Dummy(new Vector2(0, 0));
+                    ImGui.EndGroup();
+                    ImGui.SameLine();
+                    ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1f, 1f, 1f, 0.5f));
+                    ImGui.BeginDisabled(true);
+                    var lvl = entry.Difficulty.Level < 0 ? "?" : $"{entry.Difficulty.Level}";
+                    ImGui.Button($"{entry.Difficulty.Type} Lv.{lvl}");
+                    ImGui.EndDisabled();
+                    ImGui.PopStyleColor(1);
+                    
+                    ImGui.TableNextColumn();
+                    ImGui.PushID(entry.GetHashCode() + (entry.IsLegacy ? "L" : "M"));
+                    ImGui.BeginDisabled(_loadingChart);
+                    if (ImGui.Button("Load"))
+                    {
+                        _loadingChart = true;
+                        Task.Run(async () =>
+                        {
+                            var pathBase = @"D:\AppServ\www\phigros\";
+                            try
+                            {
+                                Logger.Verbose(@$"Loading chart from {pathBase}{entry.ChartPath}");
+                                await using var stream = new FileStream(@$"{pathBase}{entry.ChartPath}", FileMode.Open);
+                                Logger.Verbose("Deserializing JSON...");
+                                var model = Chart.Deserialize(stream);
+                                Logger.Verbose("Processing deserialized chart model...");
+                                var chart = await ChartView.CreateFromModelAsync(model);
+                                Logger.Verbose("Done!");
+
+                                _viewer.ActionQueue.Enqueue(() =>
+                                {
+                                    _viewer.Chart = chart;
+
+                                    _viewer.Background?.Dispose();
+                                    _viewer.Background =
+                                        ImageLoader.LoadTextureFromPath(@$"{pathBase}{entry.BackgroundPath}");
+
+                                    _viewer.MusicPlayer.Stop();
+                                    _viewer.MusicPlayer.Seek(0);
+                                    _viewer.IsPlaying = false;
+                                    _viewer.PlaybackTime = 0;
+
+                                    _viewer.MusicPlayer.Dispose();
+                                    _viewer.MusicPlayer.LoadFromPath(@$"{pathBase}{entry.AudioPath}");
+
+                                    _viewer.SongTitle = entry.Name;
+                                    _viewer.DiffName = entry.Difficulty.Type.ToString();
+                                    _viewer.DiffLevel = entry.Difficulty.Level;
+
+                                    GC.Collect();
+                                    _loadingChart = false;
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Error($"Failed! {ex}");
+                                _loadingChart = false;
+                            }
+                        });
+                    }
+                    ImGui.EndDisabled();
+                    ImGui.PopID();
                 }
                 
-                if (ImGui.BeginTable("_chartList", 2, ImGuiTableFlags.RowBg | ImGuiTableFlags.Borders))
-                {
-                    ImGui.TableSetupColumn("Title");
-                    ImGui.TableSetupColumn("Action", ImGuiTableColumnFlags.WidthFixed, 100);
-                    ImGui.TableHeadersRow();
-
-                    foreach (var entry in _charts)
-                    {
-                        ImGui.TableNextRow();
-                        ImGui.TableNextColumn();
-                        ImGui.BeginGroup();
-                        ImGui.Dummy(new Vector2(0, 0));
-                        ImGui.Text(entry.Name + (entry.IsLegacy ? " (Legacy)" : ""));
-                        ImGui.Dummy(new Vector2(0, 0));
-                        ImGui.EndGroup();
-                        ImGui.SameLine();
-                        ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(1f, 1f, 1f, 0.5f));
-                        ImGui.BeginDisabled(true);
-                        var lvl = entry.Difficulty.Level < 0 ? "?" : $"{entry.Difficulty.Level}";
-                        ImGui.Button($"{entry.Difficulty.Type} Lv.{lvl}");
-                        ImGui.EndDisabled();
-                        ImGui.PopStyleColor(1);
-                        
-                        ImGui.TableNextColumn();
-                        ImGui.PushID(entry.GetHashCode() + (entry.IsLegacy ? "L" : "M"));
-                        ImGui.BeginDisabled(_loadingChart);
-                        if (ImGui.Button("Load"))
-                        {
-                            _loadingChart = true;
-                            Task.Run(async () =>
-                            {
-                                var pathBase = @"D:\AppServ\www\phigros\";
-                                try
-                                {
-                                    Logger.Verbose(@$"Loading chart from {pathBase}{entry.ChartPath}");
-                                    await using var stream = new FileStream(@$"{pathBase}{entry.ChartPath}", FileMode.Open);
-                                    Logger.Verbose("Deserializing JSON...");
-                                    var model = Chart.Deserialize(stream);
-                                    Logger.Verbose("Processing deserialized chart model...");
-                                    var chart = await ChartView.CreateFromModelAsync(model);
-                                    Logger.Verbose("Done!");
-
-                                    _viewer.ActionQueue.Enqueue(() =>
-                                    {
-                                        _viewer.Chart = chart;
-
-                                        _viewer.Background?.Dispose();
-                                        _viewer.Background =
-                                            ImageLoader.LoadTextureFromPath(@$"{pathBase}{entry.BackgroundPath}");
-
-                                        _viewer.MusicPlayer.Stop();
-                                        _viewer.MusicPlayer.Seek(0);
-                                        _viewer.IsPlaying = false;
-                                        _viewer.PlaybackTime = 0;
-
-                                        _viewer.MusicPlayer.Dispose();
-                                        _viewer.MusicPlayer.LoadFromPath(@$"{pathBase}{entry.AudioPath}");
-
-                                        _viewer.SongTitle = entry.Name;
-                                        _viewer.DiffName = entry.Difficulty.Type.ToString();
-                                        _viewer.DiffLevel = entry.Difficulty.Level;
-
-                                        GC.Collect();
-                                        _loadingChart = false;
-                                    });
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Error($"Failed! {ex}");
-                                    _loadingChart = false;
-                                }
-                            });
-                        }
-                        ImGui.EndDisabled();
-                        ImGui.PopID();
-                    }
-                    
-                    ImGui.EndTable();
-                }
+                ImGui.EndTable();
             }
         }
 
@@ -786,7 +786,18 @@ namespace Phi.Viewer
                     ImGui.TableNextColumn();
                     ImGui.TextWrapped($"{m.MeshCount}");
                     
+                    ImGui.TableNextRow();
+                    ImGui.TableNextColumn();
+                    ImGui.Text("Cached glyphs");
+                    ImGui.TableNextColumn();
+                    ImGui.TextWrapped($"{_viewer.Renderer.CachedFontGlyphs}");
+                    
                     ImGui.EndTable();
+                }
+
+                if (ImGui.Button("Clear cached font glyphs"))
+                {
+                    _viewer.Renderer.ClearFontCache();
                 }
             }
             
@@ -1054,6 +1065,12 @@ namespace Phi.Viewer
             if (ImGui.Begin("Viewer"))
             {
                 DisplayViewerContent();
+                ImGui.End();
+            }
+            
+            if (ImGui.Begin("Chart Database"))
+            {
+                DisplayChartTableContent();
                 ImGui.End();
             }
             

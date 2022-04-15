@@ -90,7 +90,7 @@ namespace Phi.Viewer.Graphics
         private IntPtr _memFont = IntPtr.Zero;
 
         private uint _fontSize = 70;
-        private uint _fontTexPad = 5;
+        private uint _fontTexPad = 1;
         private uint _fontRes = 300;
         private Dictionary<char, DrawableCharacter> _characters = new Dictionary<char, DrawableCharacter>();
         
@@ -978,7 +978,7 @@ namespace Phi.Viewer.Graphics
                 if (chn == null) continue;
 
                 var ch = chn.Value;
-                var h = (ch.Size.Y + _fontTexPad) * scale;
+                var h = ch.Size.Y * scale;
                 AdvanceX(lastChar, c, ref x, scale);
                 lastChar = c;
                 y = MathF.Max(y, h);
@@ -993,10 +993,23 @@ namespace Phi.Viewer.Graphics
             if (chn == null) return false;
 
             var ch = chn.Value;
-            x += c == ' ' ? 87 * scale : -_fontTexPad * scale + ch.Advance * scale;
+            x += c == ' ' ? 87 * scale : ch.Advance * scale;
             if (lastChar.HasValue) x += GetKerning(lastChar.Value, c).X * scale;
             return true;
         }
+
+        public void ClearFontCache()
+        {
+            var values = _characters.Values;
+            _characters.Clear();
+            foreach (var c in values)
+            {
+                c.Texture.Dispose();
+            }
+            GC.Collect();
+        }
+
+        public int CachedFontGlyphs => _characters.Count;
         
         private unsafe DrawableCharacter? GetDrawableCharacter(char c)
         {
@@ -1014,17 +1027,22 @@ namespace Phi.Viewer.Graphics
                     TextureUsage.Sampled, TextureType.Texture2D));
                 texture.Name = $"Saira-char: {c}";
                 factory.DisposeCollector.Remove(texture);
-                
-                var size = (w + _fontTexPad) * (h + _fontTexPad) * 4;
+
+                var size = (w + _fontTexPad * 2) * (h + _fontTexPad * 2) * 4;
                 var buffer = new byte[size];
 
+                for (var i = 0; i < size; i++)
+                {
+                    buffer[i] = (byte) (i % 4 == 3 ? 0 : 255);
+                }
+                
                 for (var ty = 0; ty < face.GlyphBitmap.rows; ty++)
                 {
                     for (var tx = 0; tx < face.GlyphBitmap.width; tx++)
                     {
                         var px = Marshal.ReadByte(face.GlyphBitmap.buffer, (int) (ty * face.GlyphBitmap.width +
                             tx));
-                        var idx = ty * w * 4 + tx * 4;
+                        var idx = (ty + _fontTexPad) * (w + _fontTexPad * 2) * 4 + (tx + _fontTexPad) * 4;
                         buffer[idx+0] = 255;
                         buffer[idx+1] = 255;
                         buffer[idx+2] = 255;
@@ -1033,8 +1051,8 @@ namespace Phi.Viewer.Graphics
                 }
 
                 CommandList.PushDebugGroup($"Generate Character Texture - {c}");
-                GraphicsDevice.UpdateTexture(texture, buffer, _fontTexPad, _fontTexPad, 0, w,
-                    h, 1, 0, 0);
+                GraphicsDevice.UpdateTexture(texture, buffer, 0, 0, 0, texture.Width,
+                    texture.Height, 1, 0, 0);
                 CommandList.PopDebugGroup();
 
                 _characters.Add(c, new DrawableCharacter
@@ -1086,8 +1104,8 @@ namespace Phi.Viewer.Graphics
                 var ch = chn.Value;
                 var xPos = x + (ch.Bearing.X - _fontTexPad) * scale;
                 var yPos = y - (ch.Bearing.Y + _fontTexPad) * scale;
-                var w = (ch.Size.X + _fontTexPad) * scale;
-                var h = (ch.Size.Y + _fontTexPad) * scale;
+                var w = (ch.Size.X + _fontTexPad * 2) * scale;
+                var h = (ch.Size.Y + _fontTexPad * 2) * scale;
                 AdvanceX(lastChar, c, ref x, scale);
                 lastChar = c;
 
