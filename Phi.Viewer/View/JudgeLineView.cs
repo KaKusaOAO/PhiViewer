@@ -9,7 +9,7 @@ using Phi.Viewer.Utils;
 
 namespace Phi.Viewer.View
 {
-    public class JudgeLineView
+    public class JudgeLineView : IDisposable
     {
         private struct MeterEntry
         {
@@ -246,6 +246,19 @@ namespace Phi.Viewer.View
             renderer.DrawRect(Color.FromArgb((int)(GetLineAlpha(time) * 255), Color.White), -cw * 2, thickness / -2, cw * 4, thickness);
             
             renderer.Transform = t;
+        }
+
+        public void Dispose()
+        {
+            foreach (var note in NotesAbove)
+            {
+                note.Dispose();
+            }
+
+            foreach (var note in NotesBelow)
+            {
+                note.Dispose();
+            }
         }
     }
 }

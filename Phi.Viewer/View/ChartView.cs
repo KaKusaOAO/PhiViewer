@@ -1,11 +1,12 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Phi.Charting;
 
 namespace Phi.Viewer.View
 {
-    public class ChartView
+    public class ChartView : IDisposable
     {
         public Chart Model { get; }
         
@@ -21,6 +22,10 @@ namespace Phi.Viewer.View
         {
             await Task.Yield();
             return new ChartView(model);
+        }
+
+        public void Dispose()
+        {
         }
     }
 }

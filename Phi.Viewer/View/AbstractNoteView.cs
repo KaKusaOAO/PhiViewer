@@ -3,10 +3,11 @@ using System.IO;
 using System.Numerics;
 using Phi.Charting.Notes;
 using Phi.Resources;
+using Phi.Viewer.Graphics;
 
 namespace Phi.Viewer.View
 {
-    public abstract class AbstractNoteView
+    public abstract class AbstractNoteView : IDisposable
     {
         protected static Stream TapFXAudioStream { get; private set; }
         protected static Stream FlickFXAudioStream { get; private set; }
@@ -36,7 +37,9 @@ namespace Phi.Viewer.View
         
         public bool IsInspectorHighlightedOnNextDraw { get; set; }
 
-        public virtual bool DoesClipOnPositiveSpeed => false; 
+        public virtual bool DoesClipOnPositiveSpeed => false;
+
+        public virtual MeshRenderer MeshRenderer => null;
 
         public void Update()
         {
@@ -135,5 +138,10 @@ namespace Phi.Viewer.View
         }
 
         public virtual Stream GetClearAudioStream() => TapFXAudioStream;
+
+        public void Dispose()
+        {
+            
+        }
     }
 }
