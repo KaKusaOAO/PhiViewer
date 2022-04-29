@@ -78,7 +78,7 @@ namespace Phi.Viewer
 
         public float GetCalculatedAudioOffset()
         {
-            var offset = AudioOffset + Chart.Model.Offset;
+            var offset = AudioOffset + Chart.Model.Offset * 1000;
             return Bass.Info.Latency + offset / MusicPlayer.PlaybackRate;
         }
 
@@ -130,6 +130,9 @@ namespace Phi.Viewer
         }
 
         public double MillisSinceLaunch => _pTimer.Elapsed.TotalMilliseconds;
+
+        public float BackgroundDim { get; set; } = 0.66f;
+        public float BackgroundBlur { get; set; } = 20;
         
         public void Init()
         {
@@ -184,13 +187,13 @@ namespace Phi.Viewer
             if (IsPlaying)
             {
                 var time = DeltaTime * MusicPlayer.PlaybackRate + PlaybackTime;
-                var audioTime = MusicPlayer.PlaybackTime + GetCalculatedAudioOffset() / MusicPlayer.PlaybackRate;
+                var audioTime = MusicPlayer.PlaybackTime; // / MusicPlayer.PlaybackRate;
 
                 if (Math.Abs(time - audioTime) > 20)
                 {
                     time = audioTime;
                 }
-                
+
                 if (MusicPlayer.PlaybackTime >= MusicPlayer.Duration)
                 {
                     MusicPlayer.Stop();
@@ -203,12 +206,12 @@ namespace Phi.Viewer
                 }
 
                 PlaybackTime = Math.Min(time, MusicPlayer.Duration);
-                Time = PlaybackTime;
+                Time = PlaybackTime + (Chart?.Model.Offset * 1000 ?? 0);
             }
             else
             {
                 var smooth = MathF.Max(0, MathF.Min(1, DeltaTime / SeekSmoothness));
-                Time = M.Lerp(Time, PlaybackTime, smooth);
+                Time = M.Lerp(Time, PlaybackTime + (Chart?.Model.Offset * 1000 ?? 0), smooth);
             }
 
             while (ActionQueue.TryDequeue(out var action))
@@ -293,12 +296,12 @@ namespace Phi.Viewer
 
             Renderer.PushFilter(new FilterDescription
             {
-                BlurRadius = 20
+                BlurRadius = BackgroundBlur
             });
             Renderer.DrawTexture(Background, pad + xOffset / 2, 0, 
                 (float)iw / ih * WindowSize.Height, WindowSize.Height);
             Renderer.PopFilter();
-            Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), 
+            Renderer.DrawRect(Color.FromArgb((int)(255 * BackgroundDim), 0, 0, 0), 
                 pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             
             Renderer.PopClip();

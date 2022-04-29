@@ -604,6 +604,8 @@ namespace Phi.Viewer.Graphics
 
         public void DrawTexture(Texture texture, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
+            if (texture == null) return;
+            
             CommandList.PushDebugGroup("DrawTexture");
             var factory = Factory;
             var view = factory.CreateTextureView(texture);
@@ -670,6 +672,8 @@ namespace Phi.Viewer.Graphics
         
         public void PrepareTexture(TextureView view, TintInfo? tintInfo = null)
         {
+            if (view == null) return;
+            
             var factory = Factory;
             var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
             tintInfoBuffer.Name = "Texture TintInfo Uniform Buffer";
@@ -687,6 +691,8 @@ namespace Phi.Viewer.Graphics
         
         public void DrawTexture(TextureView view, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
+            if (view == null) return;
+            
             CommandList.PushDebugGroup("DrawTextureView");
             PrepareTexture(view, tintInfo);
             DrawQuad(x, y, width, height);

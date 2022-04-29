@@ -461,6 +461,7 @@ namespace Phi.Viewer
 
                                 _viewer.ActionQueue.Enqueue(() =>
                                 {
+                                    Logger.Verbose("Changing the chart...");
                                     _viewer.Chart = chart;
 
                                     _viewer.Background?.Dispose();
@@ -818,7 +819,12 @@ namespace Phi.Viewer
                     ImGui.TableNextColumn();
                     ImGui.Text("Offset");
                     ImGui.TableNextColumn();
-                    ImGui.TextWrapped($"{c.Model.Offset}");
+
+                    var p = c.Model.Offset;
+                    ImGui.PushID("_modelOffset");
+                    ImGui.DragFloat("", ref p, 0.001f);
+                    ImGui.PopID();
+                    c.Model.Offset = p;
                     
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
@@ -932,6 +938,14 @@ namespace Phi.Viewer
                 {
                     _viewer.CanvasScale = 1;
                 }
+
+                p = _viewer.BackgroundDim;
+                ImGui.SliderFloat("Background Dim", ref p, 0, 1);
+                _viewer.BackgroundDim = p;
+                
+                p = _viewer.BackgroundBlur;
+                ImGui.SliderFloat("Background Blur", ref p, 0, 20);
+                _viewer.BackgroundBlur = p;
                 
                 bl = _viewer.EnableParticles;
                 ImGui.Checkbox("Enable Click Particle", ref bl);

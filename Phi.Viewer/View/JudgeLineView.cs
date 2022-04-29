@@ -42,7 +42,7 @@ namespace Phi.Viewer.View
         public Vector2 GetLinePos(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineMoveEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineMoveEvents[0];
+            var ev = Model.LineMoveEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineMoveEvents.FirstOrDefault();
             if (ev == null) return new Vector2(0.5f, 0.5f);
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -55,7 +55,7 @@ namespace Phi.Viewer.View
         public float GetLineRotation(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineRotateEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineRotateEvents[0];
+            var ev = Model.LineRotateEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineRotateEvents.FirstOrDefault();
             if (ev == null) return 0;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -65,8 +65,8 @@ namespace Phi.Viewer.View
         public float GetLineAlpha(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineFadeEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineFadeEvents[0];
-            if (ev == null) return 0;
+            var ev = Model.LineFadeEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineFadeEvents.FirstOrDefault();
+            if (ev == null) return 1;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
             return MathF.Max(0, MathF.Min(1, M.Lerp(ev.Start, ev.End, progress)));
@@ -75,7 +75,7 @@ namespace Phi.Viewer.View
         public float GetSpeed(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.SpeedEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.SpeedEvents[0];
+            var ev = Model.SpeedEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.SpeedEvents.FirstOrDefault();
             if (ev == null) return 1;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -97,7 +97,7 @@ namespace Phi.Viewer.View
             if (!_meter.Any())
             {
                 var meter = 0f;
-                var ev = Model.SpeedEvents[0] ?? new SpeedEvent { Value = 1 };
+                var ev = Model.SpeedEvents.FirstOrDefault() ?? new SpeedEvent { Value = 1 };
 
                 var i = 0;
 
@@ -121,18 +121,21 @@ namespace Phi.Viewer.View
             }
 
             var i2 = 0;
-            var meter2 = _meter[0];
             var y = 0f;
-            while (meter2.Time < time)
+            if (_meter.Count >= 1)
             {
-                y = meter2.StartY + meter2.Speed * (time - meter2.Time);
-                if (++i2 < _meter.Count)
+                var meter2 = _meter[0];
+                while (meter2.Time < time)
                 {
-                    meter2 = _meter[i2];
-                }
-                else
-                {
-                    break;
+                    y = meter2.StartY + meter2.Speed * (time - meter2.Time);
+                    if (++i2 < _meter.Count)
+                    {
+                        meter2 = _meter[i2];
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
             }
 
