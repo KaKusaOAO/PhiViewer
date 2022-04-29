@@ -233,10 +233,12 @@ namespace Phi.Viewer.View
         public void RenderLine()
         {
             var viewer = PhiViewer.Instance;
-            var renderer = viewer.Renderer;
-            
-            var t = renderer.Transform;
             var time = viewer.Time; 
+            var alpha = GetLineAlpha(time);
+            if (alpha == 0) return;
+            
+            var renderer = viewer.Renderer;
+            var t = renderer.Transform;
 
             var linePos = GetScaledPos(GetLinePos(time));
             var lineRot = -GetLineRotation(time) / 180 * MathF.PI;
@@ -246,7 +248,7 @@ namespace Phi.Viewer.View
 
             var cw = viewer.WindowSize.Width - viewer.RenderXPad * 2;
             var thickness = 8 * viewer.NoteRatio;
-            renderer.DrawRect(Color.FromArgb((int)(GetLineAlpha(time) * 255), Color.White), -cw * 2, thickness / -2, cw * 4, thickness);
+            renderer.DrawRect(Color.FromArgb((int)(alpha * 255), Color.White), -cw * 2, thickness / -2, cw * 4, thickness);
             
             renderer.Transform = t;
         }

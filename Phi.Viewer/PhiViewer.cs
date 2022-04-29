@@ -78,7 +78,7 @@ namespace Phi.Viewer
 
         public float GetCalculatedAudioOffset()
         {
-            var offset = AudioOffset + Chart.Model.Offset * 1000;
+            var offset = AudioOffset;
             return Bass.Info.Latency + offset / MusicPlayer.PlaybackRate;
         }
 
@@ -187,9 +187,9 @@ namespace Phi.Viewer
             if (IsPlaying)
             {
                 var time = DeltaTime * MusicPlayer.PlaybackRate + PlaybackTime;
-                var audioTime = MusicPlayer.PlaybackTime; // / MusicPlayer.PlaybackRate;
+                var audioTime = MusicPlayer.PlaybackTime + GetCalculatedAudioOffset() / MusicPlayer.PlaybackRate;
 
-                if (Math.Abs(time - audioTime) > 20)
+                if (Math.Abs(time - audioTime) > 27)
                 {
                     time = audioTime;
                 }
@@ -282,7 +282,14 @@ namespace Phi.Viewer
 
         private void RenderBack()
         {
-            if (Background == null) return;
+            if (Background == null)
+            {
+                var s = Renderer.MeasureText("Invalid background!", 48);
+                Renderer.DrawText("Invalid background!", Color.FromArgb(64, 255, 255, 255), 48, (WindowSize.Width - s.Width) / 2,
+                    (WindowSize.Height + s.Height) / 2);
+                return;
+            }
+            
             var pad = RenderXPad;
             
             Renderer.DrawTexture(Background, 0, 0, WindowSize.Width, WindowSize.Height, new TintInfo(Vector3.One, 0, 0.4f));
