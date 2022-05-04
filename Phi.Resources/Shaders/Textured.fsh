@@ -59,7 +59,7 @@ vec4 blur(vec4 fragColor) {
     }
 
     // Output to screen
-    Color /= Quality * Directions - 15.0;
+    Color /= Quality * Directions;
     return Color;
 }
 

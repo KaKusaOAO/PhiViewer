@@ -133,6 +133,8 @@ namespace Phi.Viewer
 
         public float BackgroundDim { get; set; } = 0.66f;
         public float BackgroundBlur { get; set; } = 20;
+
+        public bool PreferTimeBasedYPos { get; set; } = true;
         
         public void Init()
         {

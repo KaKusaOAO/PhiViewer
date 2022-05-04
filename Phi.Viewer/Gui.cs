@@ -111,13 +111,13 @@ namespace Phi.Viewer
                         ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
                         ImGui.TableHeadersRow();
 
-                        void DisplayNoteDetail(AbstractNoteView note)
+                        void DisplayNoteDetail(AbstractNoteView note, int i)
                         {
                             ImGui.TableNextRow();
                             ImGui.TableNextColumn();
                             ImGui.PushID(note.GetHashCode());
 
-                            if (ImGui.Selectable($"{note.Model.Type}Note", _inspectingObject == note))
+                            if (ImGui.Selectable($"{i} - {note.Model.Type}Note", _inspectingObject == note))
                             {
                                 _inspectingObject = note;
                             }
@@ -162,9 +162,10 @@ namespace Phi.Viewer
 
                                     if (aboveOpen)
                                     {
+                                        var count = 0;
                                         foreach (var note in line.NotesAbove)
                                         {
-                                            DisplayNoteDetail(note);
+                                            DisplayNoteDetail(note, count++);
                                         }
 
                                         ImGui.TreePop();
@@ -178,9 +179,10 @@ namespace Phi.Viewer
 
                                     if (belowOpen)
                                     {
+                                        var count = 0;
                                         foreach (var note in line.NotesBelow)
                                         {
-                                            DisplayNoteDetail(note);
+                                            DisplayNoteDetail(note, count++);
                                         }
 
                                         ImGui.TreePop();
@@ -852,7 +854,7 @@ namespace Phi.Viewer
                     var cw = v.WindowSize.Width;
                     var ch = v.WindowSize.Height;
                     
-                    v.AnimatedObjects.Add(new JudgeEffect(cw / 2, ch / 2, 10));
+                    v.AnimatedObjects.Add(new JudgeEffect(cw / 2, ch / 2, 4));
                 }
 
                 if (ImGui.BeginTable("_viewerMetrics", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
@@ -1029,6 +1031,11 @@ namespace Phi.Viewer
                 if (ImGui.Button("4:3")) _viewer.MaxRatio = 4f / 3f;
                 ImGui.SameLine();
                 if (ImGui.Button("16:9")) _viewer.MaxRatio = 16f / 9f;
+
+                var b = _viewer.PreferTimeBasedYPos;
+                ImGui.Checkbox("Prefers Time Based Y Position?", ref b);
+                ImGui.TextWrapped(b ? "Note positions are calculated by their time." : "Note positions are calculated by their given floor position.");
+                _viewer.PreferTimeBasedYPos = b;
             }
             
             ImGui.PopItemWidth();

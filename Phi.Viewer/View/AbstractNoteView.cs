@@ -86,6 +86,14 @@ namespace Phi.Viewer.View
             return xPos;
         }
 
+        public virtual float GetYPos()
+        {
+            var viewer = PhiViewer.Instance;
+            if (viewer.PreferTimeBasedYPos)
+                return Parent.GetYPosWithGame(Model.Time) * (viewer.UseUniqueSpeed || this is HoldNoteView ? 1 : Model.Speed);
+            return (Model.FloorPosition - Parent.CurrentFloorPosition) * JudgeLineView.FloorPositionYScale;
+        }
+
         public bool IsOffscreen()
         {
             var viewer = PhiViewer.Instance;
@@ -133,7 +141,7 @@ namespace Phi.Viewer.View
 
             var px = MathF.Cos(rad) * xPos + linePos.X;
             var py = MathF.Sin(rad) * xPos + linePos.Y;
-            var j = new JudgeEffect(px, py, 10);
+            var j = new JudgeEffect(px, py, 4);
             viewer.AddAnimatedObject(j);
         }
 

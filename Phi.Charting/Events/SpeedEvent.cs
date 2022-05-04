@@ -6,5 +6,8 @@ namespace Phi.Charting.Events
     {
         [JsonPropertyName("value")]
         public float Value { get; set; }
+        
+        [JsonPropertyName("floorPosition")]
+        public float FloorPosition { get; set; }
     }
 }

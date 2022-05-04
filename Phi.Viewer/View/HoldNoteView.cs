@@ -70,7 +70,7 @@ namespace Phi.Viewer.View
             {
                 var renderer = viewer.Renderer;
                 var ratio = viewer.NoteRatio;
-                var yPos = Parent.GetYPosWithGame(Model.Time);
+                var yPos = GetYPos();
                 var xPos = GetXPos();
 
                 var w = NoteWidth * ratio;
@@ -86,8 +86,8 @@ namespace Phi.Viewer.View
                     endH -= ratio * 1060f / 989f;
                 }
                 
-                renderer.DrawTexture(RenderTexture, -w / 2 + xPos, -yPos - h + endH, w, h - endH);
-                renderer.DrawTexture(HeadRenderTexture, -w / 2 + xPos, -yPos, w, headH);
+                renderer.DrawTexture(RenderTexture, -w / 2 + xPos, -yPos - h + endH, w, h - endH - headH);
+                renderer.DrawTexture(HeadRenderTexture, -w / 2 + xPos, -yPos - headH, w, headH);
             }
 
             if (IsCrossed && gt < Model.Time + Model.HoldTime)

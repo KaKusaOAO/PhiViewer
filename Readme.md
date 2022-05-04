@@ -12,4 +12,4 @@
 - [x] 文字還是有一點 glitchy，需要修復
 - [x] 背景模糊
 - [ ] 效能優化?
-- [ ] 支援 floorPosition
+- [x] 支援 floorPosition

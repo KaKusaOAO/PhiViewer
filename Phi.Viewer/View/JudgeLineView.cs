@@ -69,7 +69,9 @@ namespace Phi.Viewer.View
             if (ev == null) return 1;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
-            return MathF.Max(0, MathF.Min(1, M.Lerp(ev.Start, ev.End, progress)));
+            var result = M.Clamp(M.Lerp(ev.Start, ev.End, progress), 0, 1);
+            if (float.IsNaN(result)) return 0;
+            return result;
         }
 
         public float GetSpeed(float time)
@@ -90,8 +92,25 @@ namespace Phi.Viewer.View
         public float GetYPos(float time)
         {
             var viewer = PhiViewer.Instance;
-            var multiplier = 0.00001f * viewer.RefScreenSize.Height * viewer.Host.Window.Height /
-                             MathF.Pow(Model.Bpm / 127, 1.5f);
+            if (viewer.PreferTimeBasedYPos) return GetYPosTimeBased(time);
+            return InternalGetFloorPosition(time) * FloorPositionYScale;
+        }
+
+        public static float FloorPositionYScale => PhiViewer.Instance.WindowSize.Height * 0.6f;
+
+        public float CurrentFloorPosition => InternalGetFloorPosition(GetConvertedGameTime(PhiViewer.Instance.Time));
+
+        private float InternalGetFloorPosition(float time)
+        {
+            var ev = Model.SpeedEvents.Find(e => time >= e.StartTime && time < e.EndTime) ?? Model.SpeedEvents.FirstOrDefault();
+            if (ev == null) return 0;
+            return ev.FloorPosition + GetRealTimeFromEventTime(time - ev.StartTime) / 1000 * ev.Value;
+        }
+
+        private float GetYPosTimeBased(float time)
+        {
+            var viewer = PhiViewer.Instance;
+            var multiplier = viewer.WindowSize.Height * 1.875f / Model.Bpm * 0.6f;
             if (viewer.UseUniqueSpeed) return multiplier * time;
 
             if (!_meter.Any())
@@ -194,13 +213,16 @@ namespace Phi.Viewer.View
             renderer.Translate(linePos.X, linePos.Y);
             renderer.Rotate(lineRot);
 
+            var count = 0;
             void RenderChildNote(AbstractNoteView n)
             {
+                count++;
                 n.Update();
                 if (n.IsOffscreen() && !viewer.ForceRenderOffscreen) return;
 
-                var speed = GetSpeed(time);
-                var doClip = (speed < 0 || n.DoesClipOnPositiveSpeed) &&
+                // var speed = GetSpeed(time);
+                var f = CurrentFloorPosition;
+                var doClip = n.Model.FloorPosition < f &&
                              (!n.IsOffscreen() || viewer.ForceRenderOffscreen);
 
                 renderer.CommandList.PushDebugGroup("RenderChildNote");
@@ -213,6 +235,7 @@ namespace Phi.Viewer.View
                 var profile = renderer.CurrentProfile;
                 renderer.CurrentProfile = n.IsInspectorHighlightedOnNextDraw ? renderer.BasicAdditive : renderer.BasicNormal;
                 n.Render();
+                
                 renderer.CurrentProfile = profile;
                 n.IsInspectorHighlightedOnNextDraw = false;
 
@@ -223,8 +246,10 @@ namespace Phi.Viewer.View
                 renderer.CommandList.PopDebugGroup();
             }
 
+            count = 0;
             foreach (var n in NotesAbove.Where(n => predicate(n))) RenderChildNote(n);
             renderer.Scale(1, -1);
+            count = 0;
             foreach (var n in NotesBelow.Where(n => predicate(n))) RenderChildNote(n);
 
             renderer.Transform = t;
@@ -235,7 +260,7 @@ namespace Phi.Viewer.View
             var viewer = PhiViewer.Instance;
             var time = viewer.Time; 
             var alpha = GetLineAlpha(time);
-            if (alpha == 0) return;
+            if (alpha <= 0) return;
             
             var renderer = viewer.Renderer;
             var t = renderer.Transform;

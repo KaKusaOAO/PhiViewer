@@ -36,7 +36,7 @@ namespace Phi.Viewer.View
 
             var renderer = viewer.Renderer;
             var ratio = viewer.NoteRatio;
-            var yPos = Parent.GetYPosWithGame(Model.Time) * (viewer.UseUniqueSpeed ? 1 : Model.Speed);
+            var yPos = GetYPos();
             var xPos = GetXPos();
 
             var w = NoteWidth * ratio;
