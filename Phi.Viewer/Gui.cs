@@ -1015,6 +1015,14 @@ namespace Phi.Viewer
                 if (ImGui.Button("4:3")) _viewer.MaxRatio = 4f / 3f;
                 ImGui.SameLine();
                 if (ImGui.Button("16:9")) _viewer.MaxRatio = 16f / 9f;
+
+                p = _viewer.BackgroundBlur;
+                ImGui.SliderFloat("Background Blur", ref p, 0, 20);
+                _viewer.BackgroundBlur = p;
+                
+                p = _viewer.BackgroundDim;
+                ImGui.SliderFloat("Background Dim", ref p, 0, 1);
+                _viewer.BackgroundDim = p;
             }
             
             ImGui.PopItemWidth();

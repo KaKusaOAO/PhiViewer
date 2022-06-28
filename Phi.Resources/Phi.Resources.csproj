@@ -43,6 +43,10 @@
       <EmbeddedResource Include="Audio\FlickFX.wav" />
       <None Remove="Audio\TapFX.wav" />
       <EmbeddedResource Include="Audio\TapFX.wav" />
+      <None Remove="Textures\Circle.png" />
+      <EmbeddedResource Include="Textures\Circle.png" />
+      <None Remove="Textures\Arcs.png" />
+      <EmbeddedResource Include="Textures\Arcs.png" />
     </ItemGroup>
 
     <ItemGroup>

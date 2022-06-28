@@ -42,7 +42,7 @@ namespace Phi.Viewer
         
         public bool ForceRenderOffscreen { get; set; }
 
-        public SizeF WindowSize => new SizeF(Host.Window.Width, Host.Window.Height);
+        public SizeF WindowSize { get; private set; }
 
         public float MaxRatio { get; set; } = 16f / 9f;
 
@@ -104,6 +104,10 @@ namespace Phi.Viewer
         
         public int DiffLevel { get; set; }
 
+        public float BackgroundBlur { get; set; } = 20;
+
+        public float BackgroundDim { get; set; } = 0.66f;
+
         public float NoteRatio
         {
             get
@@ -148,13 +152,13 @@ namespace Phi.Viewer
 
             _fixedUpdateTimer.Elapsed += (o, e) =>
             {
-                lock (_animObjectsLock)
+                ActionQueue.Enqueue(() =>
                 {
                     foreach (var obj in AnimatedObjects)
                     {
                         obj.FixedUpdate();
                     }
-                }
+                });
             };
             _fixedUpdateTimer.Interval = 5;
             _fixedUpdateTimer.Start();
@@ -168,6 +172,7 @@ namespace Phi.Viewer
             Gui.Update(snapshot);
 
             var refAspect = RefScreenSize.Width / RefScreenSize.Height;
+            WindowSize = new SizeF(Host.Window.Width, Host.Window.Height);
             var width = WindowSize.Width - RenderXPad;
             var height = WindowSize.Height;
             var aspect = width / height;
@@ -210,7 +215,12 @@ namespace Phi.Viewer
                 var smooth = MathF.Max(0, MathF.Min(1, DeltaTime / SeekSmoothness));
                 Time = M.Lerp(Time, PlaybackTime, smooth);
             }
+            
+            ExecuteActionQueue();
+        }
 
+        private void ExecuteActionQueue()
+        {
             while (ActionQueue.TryDequeue(out var action))
             {
                 action();
@@ -219,10 +229,10 @@ namespace Phi.Viewer
 
         public void AddAnimatedObject(AnimatedObject obj)
         {
-            lock (_animObjectsLock)
+            ActionQueue.Enqueue(() =>
             {
                 AnimatedObjects.Add(obj);
-            }
+            });
         }
         
         public void Render()
@@ -239,23 +249,21 @@ namespace Phi.Viewer
             
             RenderBack();
             RenderJudgeLines();
+            ExecuteActionQueue();
 
-            lock (_animObjectsLock)
+            var removal = new List<AnimatedObject>();
+            foreach (var obj in AnimatedObjects)
             {
-                var removal = new List<AnimatedObject>();
-                foreach (var obj in AnimatedObjects)
+                obj.Update();
+                if (obj.NotNeeded)
                 {
-                    obj.Update();
-                    if (obj.NotNeeded)
-                    {
-                        removal.Add(obj);
-                    }
+                    removal.Add(obj);
                 }
+            }
 
-                foreach (var obj in removal)
-                {
-                    AnimatedObjects.Remove(obj);
-                }
+            foreach (var obj in removal)
+            {
+                AnimatedObjects.Remove(obj);
             }
             
             RenderUI();
@@ -293,12 +301,12 @@ namespace Phi.Viewer
 
             Renderer.PushFilter(new FilterDescription
             {
-                BlurRadius = 20
+                BlurRadius = BackgroundBlur
             });
             Renderer.DrawTexture(Background, pad + xOffset / 2, 0, 
                 (float)iw / ih * WindowSize.Height, WindowSize.Height);
             Renderer.PopFilter();
-            Renderer.DrawRect(Color.FromArgb((int)(255 * 0.66), 0, 0, 0), 
+            Renderer.DrawRect(Color.FromArgb((int)(255 * BackgroundDim), 0, 0, 0), 
                 pad, 0, WindowSize.Width - pad * 2, WindowSize.Height);
             
             Renderer.PopClip();

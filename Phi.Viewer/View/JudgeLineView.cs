@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using Phi.Charting;
 using Phi.Charting.Events;
 using Phi.Viewer.Utils;
@@ -35,8 +36,10 @@ namespace Phi.Viewer.View
             NotesBelow = model.NotesBelow.Select(n => AbstractNoteView.FromModel(this, n, NoteSide.Below)).ToList();
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float GetConvertedGameTime(float time) => time * Model.Bpm / 1875;
         
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public float GetRealTimeFromEventTime(float time) => time / Model.Bpm * 1875;
 
         public Vector2 GetLinePos(float time)
@@ -90,7 +93,7 @@ namespace Phi.Viewer.View
         public float GetYPos(float time)
         {
             var viewer = PhiViewer.Instance;
-            var multiplier = 0.00001f * viewer.RefScreenSize.Height * viewer.Host.Window.Height /
+            var multiplier = 0.00001f * viewer.RefScreenSize.Height * viewer.WindowSize.Height /
                              MathF.Pow(Model.Bpm / 127, 1.5f);
             if (viewer.UseUniqueSpeed) return multiplier * time;
 

@@ -11,6 +11,7 @@ using Veldrid;
 using Veldrid.SPIRV;
 using Veldrid.Utilities;
 using static FreeTypeSharp.Native.FT;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace Phi.Viewer.Graphics
 {
@@ -513,11 +514,8 @@ namespace Phi.Viewer.Graphics
 
         public void DrawMesh(Vector3[] mesh, Vector2[] uv, ushort[] indices)
         {
-            CommandList.PushDebugGroup("DrawMesh");
             if (mesh.Length != uv.Length)
-            {
                 throw new ArgumentException("UV length doesn't match the mesh length");
-            }
 
             var vertices = new VertexInfo[mesh.Length];
             for (var i = 0; i < mesh.Length; i++)
@@ -528,7 +526,29 @@ namespace Phi.Viewer.Graphics
                     Uv = uv[i]
                 };
             }
+
+            float boundMinX, boundMinY, boundMaxX, boundMaxY;
+            if (mesh.Length == 0) return;
             
+            var transformed = mesh
+                .Select(v => Vector3.Transform(v, _transform) + new Vector3(_transform.M14, _transform.M24, _transform.M34))
+                .ToList();
+            boundMinX = boundMaxX = transformed[0].X;
+            boundMinY = boundMaxY = transformed[0].Y;
+            
+            foreach (var v in transformed.Skip(1))
+            {
+                boundMinX = MathF.Min(v.X, boundMinX);
+                boundMaxX = MathF.Max(v.X, boundMaxX);
+                boundMinY = MathF.Min(v.Y, boundMinY);
+                boundMaxY = MathF.Max(v.Y, boundMaxY);
+            }
+
+            var bound = new RectangleF(boundMinX, boundMinY, boundMaxX - boundMinX, boundMaxY - boundMinY);
+            var view = new RectangleF(0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
+            if (!view.IntersectsWith(bound)) return;
+            
+            CommandList.PushDebugGroup("DrawMesh");
             var vbDescription = new BufferDescription((uint)(20 * mesh.Length), BufferUsage.VertexBuffer);
             var vertexBuffer = Factory.CreateBuffer(vbDescription);
             vertexBuffer.Name = "Vertex Buffer";
@@ -727,8 +747,8 @@ namespace Phi.Viewer.Graphics
             if (counterClockwise) (s, e) = (e, s);
 
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
-            var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
-            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections / 4, thickness, counterClockwise);
+            var sections = (int) Math.Ceiling(radius * (e - s) / 18);
+            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections, thickness, counterClockwise);
             CommandList.PopDebugGroup();
         }
         
@@ -800,8 +820,8 @@ namespace Phi.Viewer.Graphics
             if (counterClockwise) (s, e) = (e, s);
 
             if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
-            var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
-            DrawSector(color, x, y, radius, startRadians, endRadians, sections / 2, counterClockwise);
+            var sections = (int) Math.Ceiling(radius * (e - s) / 9);
+            DrawSector(color, x, y, radius, startRadians, endRadians, sections, counterClockwise);
             CommandList.PopDebugGroup();
         }
         

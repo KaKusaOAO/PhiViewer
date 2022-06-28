@@ -35,8 +35,8 @@ vec4 blur(vec4 fragColor) {
 
     // GAUSSIAN BLUR SETTINGS {{{
     float Directions = 16.; // BLUR DIRECTIONS (Default 16.0 - More is better but slower)
-    float Quality = 4.0; // BLUR QUALITY (Default 4.0 - More is better but slower)
-    float Size = BlurRadius; // BLUR SIZE (Radius)
+    float Quality = 5.; // BLUR QUALITY (Default 4.0 - More is better but slower)
+    float Size = BlurRadius * 2.; // BLUR SIZE (Radius)
     // GAUSSIAN BLUR SETTINGS }}}
 
     vec2 Radius = Size / fsin_res;
@@ -59,18 +59,18 @@ vec4 blur(vec4 fragColor) {
     }
 
     // Output to screen
-    Color /= Quality * Directions - 15.0;
+    Color /= Quality * Directions - 15.;
     return Color;
 }
 
 void main()
 {
-    vec2 texCoords = fsin_uv;
-    vec4 inputColor = texture(sampler2D(Input, Sampler), texCoords);
+    if (fsin_pos.x < 0 || fsin_pos.y < 0 || fsin_pos.x > 1 || fsin_pos.y > 1) discard;
     vec4 clipColor = texture(sampler2D(ClipMap, ClipMapSampler), fsin_pos);
-   
     if (clipColor.x == 0 && clipColor.y == 0 && clipColor.z == 0) discard;
     
+    vec2 texCoords = fsin_uv;
+    vec4 inputColor = texture(sampler2D(Input, Sampler), texCoords);
     vec4 tintedColor = vec4(inputColor.xyz * RGBTintColor, inputColor.w);
     tintedColor = lerp(tintedColor, vec4(RGBTintColor, TintFactor), TintFactor);
     tintedColor.w *= FinalAlpha;
