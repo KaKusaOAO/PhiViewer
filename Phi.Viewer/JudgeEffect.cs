@@ -137,6 +137,8 @@ namespace Phi.Viewer
             renderer.DrawTexture(_circleTexture, -circleRadiusB, -circleRadiusB, circleRadiusB * 2, circleRadiusB * 2,
                 new TintInfo(new Vector3(color.R / 255f, color.G / 255f, color.B / 255f), 0, alpha));
             
+            color = Color.FromArgb((int)(MathF.Pow(sThickProg, 0.33f) * 255), 0xff, 0xee, 0xaa);
+            
             foreach (var p in Particles)
             {
                 var x = p.Position.X * noteRatio;

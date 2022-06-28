@@ -135,9 +135,6 @@ namespace Phi.Viewer
 
         public double MillisSinceLaunch => _pTimer.Elapsed.TotalMilliseconds;
 
-        public float BackgroundDim { get; set; } = 0.66f;
-        public float BackgroundBlur { get; set; } = 20;
-
         public bool PreferTimeBasedYPos { get; set; } = true;
         
         public void Init()

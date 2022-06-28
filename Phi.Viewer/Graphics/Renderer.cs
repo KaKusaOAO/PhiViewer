@@ -290,6 +290,7 @@ namespace Phi.Viewer.Graphics
 
             var targetWidth = GraphicsDevice.SwapchainFramebuffer.Width; // (uint) (window.Width * resolutionScale);
             var targetHeight = GraphicsDevice.SwapchainFramebuffer.Height; // (uint) (window.Height * resolutionScale);
+            if (targetWidth == 0 || targetHeight == 0) return;
             
             if (!NeedsUpdateRenderTarget && _renderColor?.Width == targetWidth
                 && _renderColor?.Height == targetHeight) return;
@@ -500,6 +501,33 @@ namespace Phi.Viewer.Graphics
         /// <param name="uv">The UV of the vertices.</param>
         public void DrawQuad(float x, float y, float width, float height, Vector2[] uv = null)
         {
+            var vectors = new List<Vector3>
+            {
+                new Vector3(x, y, 0),
+                new Vector3(x + width, y, 0),
+                new Vector3(x, y + height, 0),
+                new Vector3(x + width, y + height, 0)
+            };
+            
+            float boundMinX, boundMinY, boundMaxX, boundMaxY;
+            var transformed = vectors
+                .Select(v => Vector3.Transform(v, _transform) + new Vector3(_transform.M14, _transform.M24, _transform.M34))
+                .ToList();
+            boundMinX = boundMaxX = transformed[0].X;
+            boundMinY = boundMaxY = transformed[0].Y;
+            
+            foreach (var v in transformed.Skip(1))
+            {
+                boundMinX = MathF.Min(v.X, boundMinX);
+                boundMaxX = MathF.Max(v.X, boundMaxX);
+                boundMinY = MathF.Min(v.Y, boundMinY);
+                boundMaxY = MathF.Max(v.Y, boundMaxY);
+            }
+
+            var bound = new RectangleF(boundMinX, boundMinY, boundMaxX - boundMinX, boundMaxY - boundMinY);
+            var view = new RectangleF(0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
+            if (!view.IntersectsWith(bound)) return;
+
             var t = Transform;
             Translate(x, y);
             Scale(width, height);
@@ -533,6 +561,25 @@ namespace Phi.Viewer.Graphics
 
         public void DrawMesh(Vector3[] mesh, Vector2[] uv, ushort[] indices)
         {
+            float boundMinX, boundMinY, boundMaxX, boundMaxY;
+            var transformed = mesh
+                .Select(v => Vector3.Transform(v, _transform) + new Vector3(_transform.M14, _transform.M24, _transform.M34))
+                .ToList();
+            boundMinX = boundMaxX = transformed[0].X;
+            boundMinY = boundMaxY = transformed[0].Y;
+            
+            foreach (var v in transformed.Skip(1))
+            {
+                boundMinX = MathF.Min(v.X, boundMinX);
+                boundMaxX = MathF.Max(v.X, boundMaxX);
+                boundMinY = MathF.Min(v.Y, boundMinY);
+                boundMaxY = MathF.Max(v.Y, boundMaxY);
+            }
+
+            var bound = new RectangleF(boundMinX, boundMinY, boundMaxX - boundMinX, boundMaxY - boundMinY);
+            var view = new RectangleF(0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
+            if (!view.IntersectsWith(bound)) return;
+            
             CommandList.PushDebugGroup("DrawMesh");
             var (vertexBuffer, indexBuffer) = CreateTempBuffers(mesh, uv, indices);   
             DrawBuffers(vertexBuffer, indexBuffer);
@@ -555,7 +602,7 @@ namespace Phi.Viewer.Graphics
             }
 
             float boundMinX, boundMinY, boundMaxX, boundMaxY;
-            if (mesh.Length == 0) return;
+            if (mesh.Length == 0) return (null, null);
             
             var transformed = mesh
                 .Select(v => Vector3.Transform(v, _transform) + new Vector3(_transform.M14, _transform.M24, _transform.M34))
@@ -573,7 +620,7 @@ namespace Phi.Viewer.Graphics
 
             var bound = new RectangleF(boundMinX, boundMinY, boundMaxX - boundMinX, boundMaxY - boundMinY);
             var view = new RectangleF(0, 0, Viewer.WindowSize.Width, Viewer.WindowSize.Height);
-            if (!view.IntersectsWith(bound)) return;
+            if (!view.IntersectsWith(bound)) return (null, null);
             
             CommandList.PushDebugGroup("DrawMesh");
             var vbDescription = new BufferDescription((uint)(20 * mesh.Length), BufferUsage.VertexBuffer);
@@ -596,6 +643,9 @@ namespace Phi.Viewer.Graphics
         
         public void DrawBuffers(DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer)
         {
+            if (vertexBuffer == null) return;
+            if (indexBuffer == null) return;
+            
             CommandList.PushDebugGroup("DrawBuffer");
             CommandList.SetVertexBuffer(0, vertexBuffer);
             CommandList.SetIndexBuffer(indexBuffer, IndexFormat.UInt16);
