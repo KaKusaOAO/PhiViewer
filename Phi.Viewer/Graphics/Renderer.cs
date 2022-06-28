@@ -11,7 +11,6 @@ using Veldrid;
 using Veldrid.SPIRV;
 using Veldrid.Utilities;
 using static FreeTypeSharp.Native.FT;
-using Rectangle = System.Drawing.Rectangle;
 
 namespace Phi.Viewer.Graphics
 {
@@ -115,10 +114,19 @@ namespace Phi.Viewer.Graphics
         private GraphicsPipelineDescription _clipPD;
         private PipelineProfile _mainSwapchainProfile;
 
+        private MeshRenderer _quadPrimitiveRenderer = new MeshRenderer();
+
         public Renderer(PhiViewer viewer)
         {
             Viewer = viewer;
             Init();
+            
+            _quadPrimitiveRenderer.Mesh = Mesh.CreateQuad(0, 0, 1, 1);
+            _quadPrimitiveRenderer.OnBuffersCreated += (v, i) =>
+            {
+                Factory.DisposeCollector.Remove(v);
+                Factory.DisposeCollector.Remove(i);
+            };
         }
 
         private void Init()
@@ -489,7 +497,18 @@ namespace Phi.Viewer.Graphics
         /// <param name="y">The Y position (left-top) of the quad.</param>
         /// <param name="width">The width of the quad.</param>
         /// <param name="height">The height of the quad.</param>
+        /// <param name="uv">The UV of the vertices.</param>
         public void DrawQuad(float x, float y, float width, float height, Vector2[] uv = null)
+        {
+            var t = Transform;
+            Translate(x, y);
+            Scale(width, height);
+            _quadPrimitiveRenderer.Render(this);
+            Transform = t;
+        }
+
+        public (DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer) CreateTempQuadMesh(float x, float y, float width,
+            float height, Vector2[] uv = null)
         {
             Vector3[] quadMesh =
             {
@@ -508,11 +527,19 @@ namespace Phi.Viewer.Graphics
             };
             
             ushort[] quadIndices = { 0, 1, 2, 2, 1, 3 };
-            
-            DrawMesh(quadMesh, quadUv, quadIndices);
+
+            return CreateTempBuffers(quadMesh, quadUv, quadIndices);
         }
 
         public void DrawMesh(Vector3[] mesh, Vector2[] uv, ushort[] indices)
+        {
+            CommandList.PushDebugGroup("DrawMesh");
+            var (vertexBuffer, indexBuffer) = CreateTempBuffers(mesh, uv, indices);   
+            DrawBuffers(vertexBuffer, indexBuffer);
+            CommandList.PopDebugGroup();
+        }
+        
+        public (DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer) CreateTempBuffers(Vector3[] mesh, Vector2[] uv, ushort[] indices)
         {
             if (mesh.Length != uv.Length)
                 throw new ArgumentException("UV length doesn't match the mesh length");
@@ -553,7 +580,6 @@ namespace Phi.Viewer.Graphics
             var vertexBuffer = Factory.CreateBuffer(vbDescription);
             vertexBuffer.Name = "Vertex Buffer";
             GraphicsDevice.UpdateBuffer(vertexBuffer, 0, vertices);
-            CommandList.SetVertexBuffer(0, vertexBuffer);
             
             var ibDescription = new BufferDescription(
                 (uint)indices.Length * sizeof(ushort),
@@ -561,6 +587,18 @@ namespace Phi.Viewer.Graphics
             var indexBuffer = Factory.CreateBuffer(ibDescription);
             indexBuffer.Name = "Index Buffer";
             GraphicsDevice.UpdateBuffer(indexBuffer, 0, indices);
+
+            return (vertexBuffer, indexBuffer);
+        }
+
+        public void DrawBuffers((DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer) tuple) =>
+            DrawBuffers(tuple.vertexBuffer, tuple.indexBuffer);
+        
+        public void DrawBuffers(DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer)
+        {
+            CommandList.PushDebugGroup("DrawBuffer");
+            CommandList.SetVertexBuffer(0, vertexBuffer);
+            CommandList.SetIndexBuffer(indexBuffer, IndexFormat.UInt16);
             
             var matrixInfoBuffer = Factory.CreateBuffer(new BufferDescription(MatrixInfo.SizeInBytes, BufferUsage.UniformBuffer));
             matrixInfoBuffer.Name = "Vertex Layout - Matrix Info";
@@ -573,25 +611,46 @@ namespace Phi.Viewer.Graphics
             
             var resourceSet = Factory.CreateResourceSet(new ResourceSetDescription(_vertLayout, matrixInfoBuffer));
             resourceSet.Name = "Vertex Layout Resource Set";
-            
             CommandList.SetGraphicsResourceSet(0, resourceSet);
-            CommandList.SetIndexBuffer(indexBuffer, IndexFormat.UInt16);
-            CommandList.DrawIndexed((uint)indices.Length);
-            CommandList.PopDebugGroup();
 
-            _metrics.IndicesCount += indices.Length;
+            var indices = (int)(indexBuffer.SizeInBytes / sizeof(ushort));
+            CommandList.DrawIndexed((uint)indices);
+            
+            _metrics.IndicesCount += (int)(indexBuffer.SizeInBytes / sizeof(ushort));
             _metrics.MeshCount++;
-            _metrics.VerticesCount += vertices.Length;
+            _metrics.VerticesCount += indices;
+            CommandList.PopDebugGroup();
         }
 
         public void DrawTexture(Texture texture, float x, float y, float width, float height, TintInfo? tintInfo = null)
         {
+            if (texture == null) return;
+            
             CommandList.PushDebugGroup("DrawTexture");
             var factory = Factory;
             var view = factory.CreateTextureView(texture);
             view.Name = texture.Name + " (Generated View)";
             DrawTexture(view, x, y, width, height, tintInfo);
             CommandList.PopDebugGroup();
+        }
+
+        public void DrawMeshWithTexture(TextureView view, MeshRenderer renderer, TintInfo? tintInfo = null)
+        {
+            var factory = Factory;
+            
+            var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
+            tintInfoBuffer.Name = "Texture TintInfo Uniform Buffer";
+            GraphicsDevice.UpdateBuffer(
+                tintInfoBuffer, 0,
+                tintInfo ?? new TintInfo(new Vector3(1f, 1f, 1f), 0f, 1f));
+
+            var filtersBuffer = CreateFilterBuffer();
+            var resourceSet = factory.CreateResourceSet(new ResourceSetDescription(
+                _fragLayout, view, GraphicsDevice.LinearSampler, tintInfoBuffer, 
+                _clipStack[_clipLevel].Texture, GraphicsDevice.LinearSampler, filtersBuffer));
+            resourceSet.Name = "Texture Fragment Resource Set";
+            CommandList.SetGraphicsResourceSet(1, resourceSet);
+            renderer.Render(this);
         }
 
         public void ResolveTexture()
@@ -622,12 +681,20 @@ namespace Phi.Viewer.Graphics
             GraphicsDevice.UpdateBuffer(buffer, 0, _filters.Count == 0 ? new FilterDescription() : _filters.Peek());
             return buffer;
         }
-        
-        public void DrawTexture(TextureView view, float x, float y, float width, float height, TintInfo? tintInfo = null)
+
+        public void PrepareTexture(Texture texture, TintInfo? tintInfo = null)
         {
-            CommandList.PushDebugGroup("DrawTextureView");
             var factory = Factory;
+            var view = factory.CreateTextureView(texture);
+            view.Name = texture.Name + " (Generated View)";
+            PrepareTexture(view, tintInfo);
+        }
+        
+        public void PrepareTexture(TextureView view, TintInfo? tintInfo = null)
+        {
+            if (view == null) return;
             
+            var factory = Factory;
             var tintInfoBuffer = factory.CreateBuffer(new BufferDescription(32, BufferUsage.UniformBuffer));
             tintInfoBuffer.Name = "Texture TintInfo Uniform Buffer";
             GraphicsDevice.UpdateBuffer(
@@ -640,7 +707,14 @@ namespace Phi.Viewer.Graphics
                 _clipStack[_clipLevel].Texture, GraphicsDevice.LinearSampler, filtersBuffer));
             resourceSet.Name = "Texture Fragment Resource Set";
             CommandList.SetGraphicsResourceSet(1, resourceSet);
+        }
+        
+        public void DrawTexture(TextureView view, float x, float y, float width, float height, TintInfo? tintInfo = null)
+        {
+            if (view == null) return;
             
+            CommandList.PushDebugGroup("DrawTextureView");
+            PrepareTexture(view, tintInfo);
             DrawQuad(x, y, width, height);
             CommandList.PopDebugGroup();
         }
@@ -742,19 +816,37 @@ namespace Phi.Viewer.Graphics
         public void StrokeArc(Color color, float x, float y, float radius, float startRadians, float endRadians, float thickness, bool counterClockwise = false)
         {
             CommandList.PushDebugGroup("StrokeArc");
-            var s = startRadians;
-            var e = endRadians;
-            if (counterClockwise) (s, e) = (e, s);
-
-            if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
-            var sections = (int) Math.Ceiling(radius * (e - s) / 18);
-            StrokeSectionedArc(color, x, y, radius, startRadians, endRadians, sections, thickness, counterClockwise);
+            PrepareSolidColorResourceSet(color);
+            DrawBuffers(CreateArcStrokeMesh(x, y, radius, startRadians, endRadians, thickness, counterClockwise));
             CommandList.PopDebugGroup();
         }
         
         public void StrokeSectionedArc(Color color, float x, float y, float radius, float startRadians, float endRadians, int sections, float thickness, bool counterClockwise = false)
         {
             CommandList.PushDebugGroup($"StrokeSectionedArc ({sections} sections)");
+            PrepareSolidColorResourceSet(color);
+            DrawBuffers(CreateSectionedArcStrokeMesh(x, y, radius, startRadians, endRadians,
+                sections, thickness, counterClockwise));
+            CommandList.PopDebugGroup();
+        }
+
+        public (DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer) CreateArcStrokeMesh(float x, float y,
+            float radius, float startRadians, float endRadians, float thickness,
+            bool counterClockwise = false)
+        {
+            var s = startRadians;
+            var e = endRadians;
+            if (counterClockwise) (s, e) = (e, s);
+
+            if (e - s > MathF.PI * 2) e -= MathF.PI * 2;
+            var sections = (int) Math.Ceiling(radius * (e - s) / MathF.PI);
+            return CreateSectionedArcStrokeMesh(x, y, radius, startRadians, endRadians, sections / 4, thickness, counterClockwise);
+        }
+        
+        public (DeviceBuffer vertexBuffer, DeviceBuffer indexBuffer) CreateSectionedArcStrokeMesh(float x, float y,
+            float radius, float startRadians, float endRadians, int sections, float thickness,
+            bool counterClockwise = false)
+        {
             if (counterClockwise)
             {
                 (startRadians, endRadians) = (endRadians, startRadians);
@@ -807,9 +899,7 @@ namespace Phi.Viewer.Graphics
                 indexCount += 4;
             }
 
-            PrepareSolidColorResourceSet(color);
-            DrawMesh(vertices.ToArray(), uv.ToArray(), indices.ToArray());
-            CommandList.PopDebugGroup();
+            return CreateTempBuffers(vertices.ToArray(), uv.ToArray(), indices.ToArray());
         }
         
         public void DrawSectorSmooth(Color color, float x, float y, float radius, float startRadians, float endRadians, bool counterClockwise = false)

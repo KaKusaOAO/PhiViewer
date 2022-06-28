@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using BigGustave;
 using Veldrid;
 
@@ -43,14 +44,28 @@ namespace Phi.Viewer.Utils
         
         public static Texture LoadTextureFromStream(Stream stream, string name = null)
         {
-            var png = Png.Open(stream);
-            return LoadTextureFromPng(png, name);
+            try
+            {
+                var png = Png.Open(stream);
+                return LoadTextureFromPng(png, name);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
         
         public static Texture LoadTextureFromPath(string path)
         {
-            var png = Png.Open(path);
-            return LoadTextureFromPng(png, path);
+            try
+            {
+                var png = Png.Open(path);
+                return LoadTextureFromPng(png, path);
+            } 
+            catch (Exception)
+            {
+                return null;
+            }
         }
     }
 }

@@ -86,13 +86,13 @@ namespace Phi.Charting
                     
                     foreach (var l2 in JudgeLines)
                     {
-                        foreach (var n2 in l2.NotesAbove.Where(n2 => !n2.HasSibling && MathF.Abs(n2.Time - t) < 1 && n2 != n))
+                        foreach (var n2 in l2.NotesBelow.Where(n2 => !n2.HasSibling && MathF.Abs(n2.Time - t) < 1 && n2 != n))
                         {
                             n2.HasSibling = true;
                             n.HasSibling = true;
                         }
 
-                        foreach (var n2 in l2.NotesAbove.Where(n2 => !n2.HasSibling && MathF.Abs(n2.Time - t) < 1 && n2 != n))
+                        foreach (var n2 in l2.NotesBelow.Where(n2 => !n2.HasSibling && MathF.Abs(n2.Time - t) < 1 && n2 != n))
                         {
                             n2.HasSibling = true;
                             n.HasSibling = true;

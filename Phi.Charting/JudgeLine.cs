@@ -41,6 +41,13 @@ namespace Phi.Charting
         internal void ProcessEvents(int formatVersion)
         {
             if (formatVersion != 1) return;
+
+            var posY = 0f;
+            foreach (var ev in SpeedEvents)
+            {
+                ev.FloorPosition = posY;
+                posY += ev.Value * (ev.EndTime - ev.StartTime) / Bpm * 1.875f;
+            }
             
             foreach (var ev in LineMoveEvents)
             {

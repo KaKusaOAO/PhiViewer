@@ -10,7 +10,7 @@ using Phi.Viewer.Utils;
 
 namespace Phi.Viewer.View
 {
-    public class JudgeLineView
+    public class JudgeLineView : IDisposable
     {
         private struct MeterEntry
         {
@@ -45,7 +45,7 @@ namespace Phi.Viewer.View
         public Vector2 GetLinePos(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineMoveEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineMoveEvents[0];
+            var ev = Model.LineMoveEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineMoveEvents.FirstOrDefault();
             if (ev == null) return new Vector2(0.5f, 0.5f);
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -58,7 +58,7 @@ namespace Phi.Viewer.View
         public float GetLineRotation(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineRotateEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineRotateEvents[0];
+            var ev = Model.LineRotateEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineRotateEvents.FirstOrDefault();
             if (ev == null) return 0;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -68,17 +68,19 @@ namespace Phi.Viewer.View
         public float GetLineAlpha(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.LineFadeEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineFadeEvents[0];
-            if (ev == null) return 0;
+            var ev = Model.LineFadeEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.LineFadeEvents.FirstOrDefault();
+            if (ev == null) return 1;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
-            return MathF.Max(0, MathF.Min(1, M.Lerp(ev.Start, ev.End, progress)));
+            var result = M.Clamp(M.Lerp(ev.Start, ev.End, progress), 0, 1);
+            if (float.IsNaN(result)) return 0;
+            return result;
         }
 
         public float GetSpeed(float time)
         {
             time = GetConvertedGameTime(time);
-            var ev = Model.SpeedEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.SpeedEvents[0];
+            var ev = Model.SpeedEvents.Find(e => time > e.StartTime && time <= e.EndTime) ?? Model.SpeedEvents.FirstOrDefault();
             if (ev == null) return 1;
 
             var progress = (time - ev.StartTime) / (ev.EndTime - ev.StartTime);
@@ -93,14 +95,31 @@ namespace Phi.Viewer.View
         public float GetYPos(float time)
         {
             var viewer = PhiViewer.Instance;
-            var multiplier = 0.00001f * viewer.RefScreenSize.Height * viewer.WindowSize.Height /
-                             MathF.Pow(Model.Bpm / 127, 1.5f);
+            if (viewer.PreferTimeBasedYPos) return GetYPosTimeBased(time);
+            return InternalGetFloorPosition(time) * FloorPositionYScale;
+        }
+
+        public static float FloorPositionYScale => PhiViewer.Instance.WindowSize.Height * 0.6f;
+
+        public float CurrentFloorPosition => InternalGetFloorPosition(GetConvertedGameTime(PhiViewer.Instance.Time));
+
+        private float InternalGetFloorPosition(float time)
+        {
+            var ev = Model.SpeedEvents.Find(e => time >= e.StartTime && time < e.EndTime) ?? Model.SpeedEvents.FirstOrDefault();
+            if (ev == null) return 0;
+            return ev.FloorPosition + GetRealTimeFromEventTime(time - ev.StartTime) / 1000 * ev.Value;
+        }
+
+        private float GetYPosTimeBased(float time)
+        {
+            var viewer = PhiViewer.Instance;
+            var multiplier = viewer.WindowSize.Height * 1.875f / Model.Bpm * 0.6f;
             if (viewer.UseUniqueSpeed) return multiplier * time;
 
             if (!_meter.Any())
             {
                 var meter = 0f;
-                var ev = Model.SpeedEvents[0] ?? new SpeedEvent { Value = 1 };
+                var ev = Model.SpeedEvents.FirstOrDefault() ?? new SpeedEvent { Value = 1 };
 
                 var i = 0;
 
@@ -124,18 +143,21 @@ namespace Phi.Viewer.View
             }
 
             var i2 = 0;
-            var meter2 = _meter[0];
             var y = 0f;
-            while (meter2.Time < time)
+            if (_meter.Count >= 1)
             {
-                y = meter2.StartY + meter2.Speed * (time - meter2.Time);
-                if (++i2 < _meter.Count)
+                var meter2 = _meter[0];
+                while (meter2.Time < time)
                 {
-                    meter2 = _meter[i2];
-                }
-                else
-                {
-                    break;
+                    y = meter2.StartY + meter2.Speed * (time - meter2.Time);
+                    if (++i2 < _meter.Count)
+                    {
+                        meter2 = _meter[i2];
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
             }
 
@@ -194,13 +216,16 @@ namespace Phi.Viewer.View
             renderer.Translate(linePos.X, linePos.Y);
             renderer.Rotate(lineRot);
 
+            var count = 0;
             void RenderChildNote(AbstractNoteView n)
             {
+                count++;
                 n.Update();
                 if (n.IsOffscreen() && !viewer.ForceRenderOffscreen) return;
 
-                var speed = GetSpeed(time);
-                var doClip = (speed < 0 || n.DoesClipOnPositiveSpeed) &&
+                // var speed = GetSpeed(time);
+                var f = CurrentFloorPosition;
+                var doClip = n.Model.FloorPosition < f &&
                              (!n.IsOffscreen() || viewer.ForceRenderOffscreen);
 
                 renderer.CommandList.PushDebugGroup("RenderChildNote");
@@ -213,6 +238,7 @@ namespace Phi.Viewer.View
                 var profile = renderer.CurrentProfile;
                 renderer.CurrentProfile = n.IsInspectorHighlightedOnNextDraw ? renderer.BasicAdditive : renderer.BasicNormal;
                 n.Render();
+                
                 renderer.CurrentProfile = profile;
                 n.IsInspectorHighlightedOnNextDraw = false;
 
@@ -223,8 +249,10 @@ namespace Phi.Viewer.View
                 renderer.CommandList.PopDebugGroup();
             }
 
+            count = 0;
             foreach (var n in NotesAbove.Where(n => predicate(n))) RenderChildNote(n);
             renderer.Scale(1, -1);
+            count = 0;
             foreach (var n in NotesBelow.Where(n => predicate(n))) RenderChildNote(n);
 
             renderer.Transform = t;
@@ -233,10 +261,12 @@ namespace Phi.Viewer.View
         public void RenderLine()
         {
             var viewer = PhiViewer.Instance;
-            var renderer = viewer.Renderer;
-            
-            var t = renderer.Transform;
             var time = viewer.Time; 
+            var alpha = GetLineAlpha(time);
+            if (alpha <= 0) return;
+            
+            var renderer = viewer.Renderer;
+            var t = renderer.Transform;
 
             var linePos = GetScaledPos(GetLinePos(time));
             var lineRot = -GetLineRotation(time) / 180 * MathF.PI;
@@ -246,9 +276,22 @@ namespace Phi.Viewer.View
 
             var cw = viewer.WindowSize.Width - viewer.RenderXPad * 2;
             var thickness = 8 * viewer.NoteRatio;
-            renderer.DrawRect(Color.FromArgb((int)(GetLineAlpha(time) * 255), Color.White), -cw * 2, thickness / -2, cw * 4, thickness);
+            renderer.DrawRect(Color.FromArgb((int)(alpha * 255), Color.White), -cw * 2, thickness / -2, cw * 4, thickness);
             
             renderer.Transform = t;
+        }
+
+        public void Dispose()
+        {
+            foreach (var note in NotesAbove)
+            {
+                note.Dispose();
+            }
+
+            foreach (var note in NotesBelow)
+            {
+                note.Dispose();
+            }
         }
     }
 }

@@ -111,13 +111,13 @@ namespace Phi.Viewer
                         ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.NoHide);
                         ImGui.TableHeadersRow();
 
-                        void DisplayNoteDetail(AbstractNoteView note)
+                        void DisplayNoteDetail(AbstractNoteView note, int i)
                         {
                             ImGui.TableNextRow();
                             ImGui.TableNextColumn();
                             ImGui.PushID(note.GetHashCode());
 
-                            if (ImGui.Selectable($"{note.Model.Type}Note", _inspectingObject == note))
+                            if (ImGui.Selectable($"{i} - {note.Model.Type}Note", _inspectingObject == note))
                             {
                                 _inspectingObject = note;
                             }
@@ -162,9 +162,10 @@ namespace Phi.Viewer
 
                                     if (aboveOpen)
                                     {
+                                        var count = 0;
                                         foreach (var note in line.NotesAbove)
                                         {
-                                            DisplayNoteDetail(note);
+                                            DisplayNoteDetail(note, count++);
                                         }
 
                                         ImGui.TreePop();
@@ -178,9 +179,10 @@ namespace Phi.Viewer
 
                                     if (belowOpen)
                                     {
+                                        var count = 0;
                                         foreach (var note in line.NotesBelow)
                                         {
-                                            DisplayNoteDetail(note);
+                                            DisplayNoteDetail(note, count++);
                                         }
 
                                         ImGui.TreePop();
@@ -461,6 +463,7 @@ namespace Phi.Viewer
 
                                 _viewer.ActionQueue.Enqueue(() =>
                                 {
+                                    Logger.Verbose("Changing the chart...");
                                     _viewer.Chart = chart;
 
                                     _viewer.Background?.Dispose();
@@ -818,7 +821,12 @@ namespace Phi.Viewer
                     ImGui.TableNextColumn();
                     ImGui.Text("Offset");
                     ImGui.TableNextColumn();
-                    ImGui.TextWrapped($"{c.Model.Offset}");
+
+                    var p = c.Model.Offset;
+                    ImGui.PushID("_modelOffset");
+                    ImGui.DragFloat("", ref p, 0.001f);
+                    ImGui.PopID();
+                    c.Model.Offset = p;
                     
                     ImGui.TableNextRow();
                     ImGui.TableNextColumn();
@@ -846,7 +854,7 @@ namespace Phi.Viewer
                     var cw = v.WindowSize.Width;
                     var ch = v.WindowSize.Height;
                     
-                    v.AnimatedObjects.Add(new JudgeEffect(cw / 2, ch / 2, 10));
+                    v.AnimatedObjects.Add(new JudgeEffect(cw / 2, ch / 2, 4));
                 }
 
                 if (ImGui.BeginTable("_viewerMetrics", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.Resizable))
@@ -932,6 +940,14 @@ namespace Phi.Viewer
                 {
                     _viewer.CanvasScale = 1;
                 }
+
+                p = _viewer.BackgroundDim;
+                ImGui.SliderFloat("Background Dim", ref p, 0, 1);
+                _viewer.BackgroundDim = p;
+                
+                p = _viewer.BackgroundBlur;
+                ImGui.SliderFloat("Background Blur", ref p, 0, 20);
+                _viewer.BackgroundBlur = p;
                 
                 bl = _viewer.EnableParticles;
                 ImGui.Checkbox("Enable Click Particle", ref bl);
@@ -1023,6 +1039,11 @@ namespace Phi.Viewer
                 p = _viewer.BackgroundDim;
                 ImGui.SliderFloat("Background Dim", ref p, 0, 1);
                 _viewer.BackgroundDim = p;
+
+                var b = _viewer.PreferTimeBasedYPos;
+                ImGui.Checkbox("Prefers Time Based Y Position?", ref b);
+                ImGui.TextWrapped(b ? "Note positions are calculated by their time." : "Note positions are calculated by their given floor position.");
+                _viewer.PreferTimeBasedYPos = b;
             }
             
             ImGui.PopItemWidth();

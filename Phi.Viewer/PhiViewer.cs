@@ -78,7 +78,7 @@ namespace Phi.Viewer
 
         public float GetCalculatedAudioOffset()
         {
-            var offset = AudioOffset + Chart.Model.Offset;
+            var offset = AudioOffset;
             return Bass.Info.Latency + offset / MusicPlayer.PlaybackRate;
         }
 
@@ -134,6 +134,11 @@ namespace Phi.Viewer
         }
 
         public double MillisSinceLaunch => _pTimer.Elapsed.TotalMilliseconds;
+
+        public float BackgroundDim { get; set; } = 0.66f;
+        public float BackgroundBlur { get; set; } = 20;
+
+        public bool PreferTimeBasedYPos { get; set; } = true;
         
         public void Init()
         {
@@ -191,11 +196,11 @@ namespace Phi.Viewer
                 var time = DeltaTime * MusicPlayer.PlaybackRate + PlaybackTime;
                 var audioTime = MusicPlayer.PlaybackTime + GetCalculatedAudioOffset() / MusicPlayer.PlaybackRate;
 
-                if (Math.Abs(time - audioTime) > 20)
+                if (Math.Abs(time - audioTime) > 27)
                 {
                     time = audioTime;
                 }
-                
+
                 if (MusicPlayer.PlaybackTime >= MusicPlayer.Duration)
                 {
                     MusicPlayer.Stop();
@@ -208,12 +213,12 @@ namespace Phi.Viewer
                 }
 
                 PlaybackTime = Math.Min(time, MusicPlayer.Duration);
-                Time = PlaybackTime;
+                Time = PlaybackTime + (Chart?.Model.Offset * 1000 ?? 0);
             }
             else
             {
                 var smooth = MathF.Max(0, MathF.Min(1, DeltaTime / SeekSmoothness));
-                Time = M.Lerp(Time, PlaybackTime, smooth);
+                Time = M.Lerp(Time, PlaybackTime + (Chart?.Model.Offset * 1000 ?? 0), smooth);
             }
             
             ExecuteActionQueue();
@@ -287,7 +292,14 @@ namespace Phi.Viewer
 
         private void RenderBack()
         {
-            if (Background == null) return;
+            if (Background == null)
+            {
+                var s = Renderer.MeasureText("Invalid background!", 48);
+                Renderer.DrawText("Invalid background!", Color.FromArgb(64, 255, 255, 255), 48, (WindowSize.Width - s.Width) / 2,
+                    (WindowSize.Height + s.Height) / 2);
+                return;
+            }
+            
             var pad = RenderXPad;
             
             Renderer.DrawTexture(Background, 0, 0, WindowSize.Width, WindowSize.Height, new TintInfo(Vector3.One, 0, 0.4f));

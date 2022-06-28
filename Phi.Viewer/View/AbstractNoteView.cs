@@ -3,10 +3,11 @@ using System.IO;
 using System.Numerics;
 using Phi.Charting.Notes;
 using Phi.Resources;
+using Phi.Viewer.Graphics;
 
 namespace Phi.Viewer.View
 {
-    public abstract class AbstractNoteView
+    public abstract class AbstractNoteView : IDisposable
     {
         protected static Stream TapFXAudioStream { get; private set; }
         protected static Stream FlickFXAudioStream { get; private set; }
@@ -36,7 +37,9 @@ namespace Phi.Viewer.View
         
         public bool IsInspectorHighlightedOnNextDraw { get; set; }
 
-        public virtual bool DoesClipOnPositiveSpeed => false; 
+        public virtual bool DoesClipOnPositiveSpeed => false;
+
+        public virtual MeshRenderer MeshRenderer => null;
 
         public void Update()
         {
@@ -81,6 +84,14 @@ namespace Phi.Viewer.View
             xPos = fp.X;
             
             return xPos;
+        }
+
+        public virtual float GetYPos()
+        {
+            var viewer = PhiViewer.Instance;
+            if (viewer.PreferTimeBasedYPos)
+                return Parent.GetYPosWithGame(Model.Time) * (viewer.UseUniqueSpeed || this is HoldNoteView ? 1 : Model.Speed);
+            return (Model.FloorPosition - Parent.CurrentFloorPosition) * JudgeLineView.FloorPositionYScale;
         }
 
         public bool IsOffscreen()
@@ -130,10 +141,15 @@ namespace Phi.Viewer.View
 
             var px = MathF.Cos(rad) * xPos + linePos.X;
             var py = MathF.Sin(rad) * xPos + linePos.Y;
-            var j = new JudgeEffect(px, py, 10);
+            var j = new JudgeEffect(px, py, 4);
             viewer.AddAnimatedObject(j);
         }
 
         public virtual Stream GetClearAudioStream() => TapFXAudioStream;
+
+        public void Dispose()
+        {
+            
+        }
     }
 }
